@@ -44,6 +44,24 @@ export default function Home() {
             <a href="#about">About us</a>
           </div>
 
+          <details className="mobile-menu">
+            <summary aria-label="Open navigation menu">
+              <span></span>
+              <span></span>
+              <span></span>
+            </summary>
+
+            <div className="mobile-menu-panel">
+              <a href="#home">Home</a>
+              <a href="#services">Services</a>
+              <a href="#how-it-works">How it works</a>
+              <a href="#about">About us</a>
+              <div className="mobile-menu-divider"></div>
+              <a href="/login">Log in</a>
+              <a className="mobile-menu-cta" href="/register">Get started</a>
+            </div>
+          </details>
+
           <div className="nav-actions">
             <a className="login-link" href="/login">Log in</a>
             <a className="button button-small" href="/register">Get started</a>
