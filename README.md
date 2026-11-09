@@ -1,82 +1,20 @@
-# MediChannel – Backend
+# MediChannel · Lanka Care Hospital
 
-## Project Overview
+## Run locally
+**Option A (recommended):** `python server.py` then open http://localhost:8000  (Python 3 required)
 
-MediChannel is a Hospital Channelling and Appointment Management System developed as a group project for IT404050 – Full Stack Development.
+**Option B:** double-click `index.html` (works in demo mode too).
 
-The backend provides REST APIs, authentication, business logic, database operations, and real-time communication.
+## Notes
+- Needs internet on first load: Tailwind CSS and Google Fonts load from CDNs.
+- No backend is included. Login/register fall back to built-in **demo mode**;
+  demo accounts are listed in `DEMO_USERS` in `js/app.js`.
+- Data is saved in your browser (localStorage, key `mc-db5`). Clear site data to reset.
 
-## Technology Stack
-
-- Java
-- Spring Boot
-- Spring Security
-- Spring Data JPA
-- Spring WebSocket
-- PostgreSQL
-- Maven
-
-## Deployment Architecture
-
-- Backend hosting: Render
-- Database hosting: Neon PostgreSQL
-- Frontend hosting: Netlify
-
-## User Roles
-
-- CUSTOMER
-- DOCTOR
-- MANAGER
-- ADMIN
-
-## Main Modules
-
-- Authentication and authorization
-- User and role management
-- Patient management
-- Doctor and specialisation management
-- Room and session management
-- Appointment booking
-- Queue management
-- Online consultation chat
-- Notifications
-- Feedback and notices
-- Audit logs
-
-## Database
-
-The system uses PostgreSQL hosted on Neon.
-
-Database schema changes will be managed through Flyway migration files.
-
-Never commit database passwords, connection strings, encryption keys, JWT secrets, or other credentials.
-
-## Getting Started
-
-Backend setup instructions will be added after the Spring Boot project is initialized.
-
-## Environment Variables
-
-Create a local `.env` file for development.
-
-Example:
-
-    DB_URL=jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require
-    DB_USERNAME=YOUR_DATABASE_USERNAME
-    DB_PASSWORD=YOUR_DATABASE_PASSWORD
-
-These are example placeholders only. Use your own development credentials.
-
-Do not commit `.env` or any file containing real credentials.
-
-## Team Development
-
-1. Clone the repository.
-2. Create a feature branch for your assigned task.
-3. Make your changes.
-4. Commit and push your work if you have repository write access.
-5. Submit a pull request for review.
-
-## Project Repository
-
-https://github.com/wcm24b126-hue/medichannel-backend
+## Structure
+- `index.html` – page markup
+- `css/style.css` – styles
+- `js/tailwind-config.js` – Tailwind theme
+- `js/app.js` – app shell, auth, translations
+- `js/medichannel.js` – booking/queue system
+- `server.py` – local static server
