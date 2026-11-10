@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediChannel Design System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  fontFamily: { sans: ['Inter','ui-sans-serif','system-ui','sans-serif'] },
+  colors: { brand: {50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a'} }
+} } }
+</script>
+<style type="text/tailwindcss">
+@layer components {
+  .btn{@apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50;}
+  .btn-primary{@apply bg-brand-600 text-white hover:bg-brand-700;}
+  .btn-secondary{@apply bg-white text-slate-800 ring-1 ring-slate-300 hover:bg-slate-50;}
+  .btn-danger{@apply bg-rose-600 text-white hover:bg-rose-700;}
+  .btn-success{@apply bg-emerald-600 text-white hover:bg-emerald-700;}
+  .btn-ghost{@apply text-brand-700 hover:bg-brand-50;}
+  .btn-sm{@apply px-3 py-1.5 text-xs;}
+  .card{@apply rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200;}
+  .label{@apply mb-1.5 block text-sm font-medium text-slate-700;}
+  .input{@apply block w-full rounded-xl border-0 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-600 disabled:bg-slate-100 disabled:text-slate-500;}
+  .input.invalid{@apply ring-2 ring-rose-500;}
+  .input.valid{@apply ring-emerald-500;}
+  .badge{@apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset;}
+  .b-blue{@apply bg-blue-50 text-blue-700 ring-blue-200;}
+  .b-cyan{@apply bg-cyan-50 text-cyan-800 ring-cyan-200;}
+  .b-violet{@apply bg-violet-50 text-violet-700 ring-violet-200;}
+  .b-green{@apply bg-emerald-50 text-emerald-700 ring-emerald-200;}
+  .b-amber{@apply bg-amber-50 text-amber-800 ring-amber-200;}
+  .b-rose{@apply bg-rose-50 text-rose-700 ring-rose-200;}
+  .b-slate{@apply bg-slate-100 text-slate-700 ring-slate-200;}
+  .th{@apply px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500;}
+  .td{@apply px-3 py-2.5 align-middle;}
+}
+</style>
+<style>
+  .err{display:none;margin-top:.375rem;font-size:.75rem;font-weight:600;color:#e11d48}
+  .err.show{display:block}
+  .skel{background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 37%,#e2e8f0 63%);background-size:400% 100%;animation:sk 1.4s ease infinite}
+  @keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
+  .dots span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:9999px;background:#94a3b8;animation:bn 1s infinite}
+  .dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+  @keyframes bn{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  @media print{body *{visibility:hidden}#summary-print,#summary-print *{visibility:visible}#summary-print{position:absolute;left:0;top:0;width:100%}}
+</style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 antialiased" id="top">
+<a href="#foundations" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2">Skip to content</a>
+
+<!-- NAV -->
+<header class="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+  <div class="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
+    <a href="#top" class="flex items-center gap-2 font-extrabold text-brand-900">
+      <span class="grid h-9 w-9 place-items-center rounded-xl bg-brand-600 text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg></span>
+      MediChannel <span class="hidden text-xs font-semibold text-slate-500 sm:inline">Design System v1.0</span>
+    </a>
+    <nav class="ml-auto hidden gap-1 text-sm font-medium text-slate-600 lg:flex" aria-label="Sections">
+      <a class="rounded-lg px-3 py-1.5 hover:bg-slate-100" href="#foundations">Foundations</a>
+      <a class="rounded-lg px-3 py-1.5 hover:bg-slate-100" href="#components">Components</a>
+      <a class="rounded-lg px-3 py-1.5 hover:bg-slate-100" href="#flows">Flows</a>
+      <a class="rounded-lg px-3 py-1.5 hover:bg-slate-100" href="#screens">Screens</a>
+      <a class="rounded-lg px-3 py-1.5 hover:bg-slate-100" href="#states">States</a>
+      <a class="rounded-lg px-3 py-1.5 hover:bg-slate-100" href="#responsive">Mobile</a>
+      <a class="rounded-lg px-3 py-1.5 hover:bg-slate-100" href="#coverage">Spec coverage</a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="bg-gradient-to-br from-brand-900 via-brand-800 to-brand-600 text-white">
+  <div class="mx-auto max-w-7xl px-4 py-14 sm:py-20">
+    <p class="text-xs font-bold uppercase tracking-widest text-brand-200">IT404050 · Assignment 2 · Next.js + Tailwind</p>
+    <h1 class="mt-3 max-w-3xl text-4xl font-extrabold leading-tight sm:text-5xl">MediChannel UI Design System</h1>
+    <p class="mt-4 max-w-2xl text-lg text-brand-100">Tokens, components, role flows and working screens for Guest, Patient, Doctor, Manager and Admin. Every screen follows the booking rules (BR-01 to BR-11), the real-time features (RT-01 to RT-04) and the privacy rule.</p>
+    <div class="mt-6 flex flex-wrap gap-2 text-xs font-semibold">
+      <span class="rounded-full bg-white/15 px-3 py-1">5 roles</span>
+      <span class="rounded-full bg-white/15 px-3 py-1">Interactive demos</span>
+      <span class="rounded-full bg-white/15 px-3 py-1">Chat, not video (RT-03)</span>
+      <span class="rounded-full bg-white/15 px-3 py-1">LKR · Asia/Colombo</span>
+      <span class="rounded-full bg-white/15 px-3 py-1">WCAG AA focus &amp; contrast</span>
+      <span class="rounded-full bg-white/15 px-3 py-1">Mobile first</span>
+    </div>
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="#screens" class="btn bg-white text-brand-800 hover:bg-brand-50">Try the screens</a>
+      <a href="#tokens" class="btn bg-white/10 text-white ring-1 ring-white/40 hover:bg-white/20">Tailwind tokens for Next.js</a>
+    </div>
+  </div>
+</section>
+
+<main class="mx-auto max-w-7xl px-4">
+
+<!-- 01 FOUNDATIONS -->
+<section id="foundations" class="scroll-mt-20 py-14">
+  <div class="mb-8"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">01 · Foundations</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">Design tokens</h2>
+  <p class="mt-2 max-w-3xl text-slate-600">One blue brand, one accent per role, and status colours that always pair with a text label, so colour is never the only signal.</p></div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Brand scale</h3>
+      <div class="mt-4 grid grid-cols-5 gap-2 sm:grid-cols-10">
+        <div><div class="h-14 rounded-lg bg-brand-50 ring-1 ring-slate-200"></div><p class="mt-1 text-[11px] font-medium text-slate-600">50</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-100"></div><p class="mt-1 text-[11px] font-medium text-slate-600">100</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-200"></div><p class="mt-1 text-[11px] font-medium text-slate-600">200</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-300"></div><p class="mt-1 text-[11px] font-medium text-slate-600">300</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-400"></div><p class="mt-1 text-[11px] font-medium text-slate-600">400</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-500"></div><p class="mt-1 text-[11px] font-medium text-slate-600">500</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-600"></div><p class="mt-1 text-[11px] font-bold text-slate-900">600 · primary</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-700"></div><p class="mt-1 text-[11px] font-medium text-slate-600">700</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-800"></div><p class="mt-1 text-[11px] font-medium text-slate-600">800</p></div>
+        <div><div class="h-14 rounded-lg bg-brand-900"></div><p class="mt-1 text-[11px] font-medium text-slate-600">900</p></div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">White text on brand-600 or darker passes AA (4.5:1). Body text uses slate-800 on white.</p>
+    </div>
+
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Role accents</h3>
+      <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><div class="h-2 rounded bg-slate-600"></div><p class="mt-2 text-sm font-bold text-slate-800">Guest</p><p class="text-[11px] text-slate-500">slate</p></div>
+        <div class="rounded-xl bg-emerald-50 p-3 ring-1 ring-emerald-200"><div class="h-2 rounded bg-emerald-600"></div><p class="mt-2 text-sm font-bold text-emerald-800">Patient</p><p class="text-[11px] text-slate-500">emerald</p></div>
+        <div class="rounded-xl bg-violet-50 p-3 ring-1 ring-violet-200"><div class="h-2 rounded bg-violet-600"></div><p class="mt-2 text-sm font-bold text-violet-800">Doctor</p><p class="text-[11px] text-slate-500">violet</p></div>
+        <div class="rounded-xl bg-amber-50 p-3 ring-1 ring-amber-200"><div class="h-2 rounded bg-amber-600"></div><p class="mt-2 text-sm font-bold text-amber-800">Manager</p><p class="text-[11px] text-slate-500">amber</p></div>
+        <div class="rounded-xl bg-rose-50 p-3 ring-1 ring-rose-200"><div class="h-2 rounded bg-rose-600"></div><p class="mt-2 text-sm font-bold text-rose-800">Admin</p><p class="text-[11px] text-slate-500">rose</p></div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">Used for dashboard headers, role badges and the sidebar highlight, never for status.</p>
+    </div>
+
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Typography · Inter</h3>
+      <div class="mt-4 divide-y divide-slate-100">
+        <div class="flex items-baseline justify-between py-2"><span class="text-4xl font-extrabold leading-tight">Display</span><code class="text-xs text-slate-500">text-4xl / 800</code></div>
+        <div class="flex items-baseline justify-between py-2"><span class="text-2xl font-bold">Page title</span><code class="text-xs text-slate-500">text-2xl / 700</code></div>
+        <div class="flex items-baseline justify-between py-2"><span class="text-lg font-semibold">Section title</span><code class="text-xs text-slate-500">text-lg / 600</code></div>
+        <div class="flex items-baseline justify-between py-2"><span class="text-base">Body text for forms and paragraphs</span><code class="text-xs text-slate-500">text-base / 400</code></div>
+        <div class="flex items-baseline justify-between py-2"><span class="text-sm text-slate-600">Helper, table and label text</span><code class="text-xs text-slate-500">text-sm</code></div>
+        <div class="flex items-baseline justify-between py-2"><span class="text-xs text-slate-500">Caption and badge text</span><code class="text-xs text-slate-500">text-xs</code></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Shape, depth and spacing</h3>
+      <div class="mt-4 grid grid-cols-3 gap-4 text-center text-xs text-slate-600">
+        <div><div class="mx-auto h-16 w-full rounded-xl bg-brand-100"></div><p class="mt-2 font-semibold">Controls</p><p>rounded-xl</p></div>
+        <div><div class="mx-auto h-16 w-full rounded-2xl bg-white shadow-sm ring-1 ring-slate-200"></div><p class="mt-2 font-semibold">Cards</p><p>rounded-2xl · shadow-sm</p></div>
+        <div><div class="mx-auto h-16 w-full rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200"></div><p class="mt-2 font-semibold">Dialogs</p><p>shadow-2xl</p></div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">Spacing runs on a 4 px grid (gap-2, gap-3, gap-4, p-5). Minimum touch target 44 px on phones.</p>
+    </div>
+
+    <div class="card lg:col-span-2">
+      <h3 class="font-bold text-slate-900">Status vocabulary (BR-08)</h3>
+      <p class="mt-1 text-sm text-slate-600">Always a text label plus a colour. These match the database enums exactly.</p>
+      <div class="mt-4 grid gap-6 md:grid-cols-3">
+        <div><p class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Appointment</p><div id="apptStatuses" class="space-y-2"></div></div>
+        <div><p class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Session (BR-01)</p><div id="sessStatuses" class="space-y-2"></div></div>
+        <div><p class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Payment</p><div id="payStatuses" class="space-y-2"></div>
+          <p class="mt-3 text-xs text-slate-500">Method: <b>CASH</b> or <b>CARD</b>. Money is shown as <b>LKR 2,500</b> (NUMERIC in the database).</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 COMPONENTS -->
+<section id="components" class="scroll-mt-20 border-t border-slate-200 py-14">
+  <div class="mb-8"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">02 · Components</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">Reusable building blocks</h2>
+  <p class="mt-2 max-w-3xl text-slate-600">Defined once as Tailwind component classes (<code class="rounded bg-slate-100 px-1">.btn</code>, <code class="rounded bg-slate-100 px-1">.input</code>, <code class="rounded bg-slate-100 px-1">.card</code>, <code class="rounded bg-slate-100 px-1">.badge</code>) so every page looks the same. In Next.js these become React components with props.</p></div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Buttons</h3>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button class="btn btn-primary">Book appointment</button>
+        <button class="btn btn-secondary">Back</button>
+        <button class="btn btn-danger">Cancel session</button>
+        <button class="btn btn-success">Mark completed</button>
+        <button class="btn btn-ghost">View profile</button>
+        <button class="btn btn-primary" disabled>Disabled</button>
+        <button class="btn btn-primary" id="loadBtn"><svg class="hidden h-4 w-4 animate-spin" id="loadSpin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" stroke-width="4"/></svg><span>Click for loading</span></button>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">One primary action per screen. Destructive actions always open a confirmation dialog.</p>
+    </div>
+
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Form field anatomy</h3>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <div><label class="label" for="c1">Phone</label><input id="c1" class="input" placeholder="07XXXXXXXX"><p class="mt-1.5 text-xs text-slate-500">Helper text sits under the field.</p></div>
+        <div><label class="label" for="c2">Phone</label><input id="c2" class="input invalid" value="0712" aria-invalid="true" aria-describedby="c2e"><p id="c2e" class="err show">Phone must look like 07XXXXXXXX.</p></div>
+        <div><label class="label" for="c3">Email</label><input id="c3" class="input valid" value="fahim@example.com"></div>
+        <div><label class="label" for="c4">Locked field</label><input id="c4" class="input" value="Read only" disabled></div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">Errors appear only under the invalid field, in red, with text. Validated on the client and again on the server.</p>
+    </div>
+
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Stepper &amp; segmented control</h3>
+      <ol class="mt-4 flex items-center gap-2 text-xs font-semibold" aria-label="Booking steps">
+        <li class="flex items-center gap-2"><span class="grid h-7 w-7 place-items-center rounded-full bg-brand-600 text-white">✓</span>Doctor</li><li class="h-px flex-1 bg-brand-600"></li>
+        <li class="flex items-center gap-2"><span class="grid h-7 w-7 place-items-center rounded-full bg-brand-600 text-white">2</span>Session</li><li class="h-px flex-1 bg-slate-300"></li>
+        <li class="flex items-center gap-2 text-slate-500"><span class="grid h-7 w-7 place-items-center rounded-full bg-slate-200 text-slate-600">3</span>Details</li><li class="h-px flex-1 bg-slate-300"></li>
+        <li class="flex items-center gap-2 text-slate-500"><span class="grid h-7 w-7 place-items-center rounded-full bg-slate-200 text-slate-600">4</span>Confirm</li>
+      </ol>
+      <div class="mt-6 inline-flex rounded-xl bg-slate-100 p-1 text-sm font-semibold" role="group" aria-label="Session type">
+        <button class="rounded-lg bg-white px-4 py-1.5 text-brand-700 shadow-sm" aria-pressed="true">Physical</button>
+        <button class="rounded-lg px-4 py-1.5 text-slate-600" aria-pressed="false">Online (chat)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 class="font-bold text-slate-900">Toast &amp; dialog</h3>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button class="btn btn-secondary" id="toastBtn">Show notification toast</button>
+        <button class="btn btn-secondary" id="dlgBtn">Open confirm dialog</button>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">Toasts use <code>aria-live="polite"</code>. Dialogs use the native <code>&lt;dialog&gt;</code> element, so focus is trapped and Esc closes it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 03 FLOWS -->
+<section id="flows" class="scroll-mt-20 border-t border-slate-200 py-14">
+  <div class="mb-8"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">03 · Role flows</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">What each user can do</h2>
+  <p class="mt-2 max-w-3xl text-slate-600">One dashboard per role, each task is one screen. Every permission is checked on the server, including WebSocket messages.</p></div>
+  <div role="tablist" aria-label="Roles" id="flowTabs" class="mb-4 flex flex-wrap gap-2"></div>
+  <div id="flowPanel" role="tabpanel"></div>
+</section>
+
+<!-- 04 SCREENS -->
+<section id="screens" class="scroll-mt-20 border-t border-slate-200 py-14">
+  <div class="mb-8"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">04 · Key screens</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">Working screens</h2>
+  <p class="mt-2 max-w-3xl text-slate-600">These are live demos. Try invalid input, book the last number, cancel inside 3 hours, drop the chat connection, or call the next patient.</p></div>
+
+  <div class="grid gap-6 lg:grid-cols-2">
+
+    <!-- LOGIN -->
+    <article class="card" id="s-login">
+      <div class="mb-4 flex items-center justify-between gap-2"><h3 class="font-bold text-slate-900">1 · Log in</h3><span class="badge b-slate">Guest</span></div>
+      <form id="loginForm" novalidate class="space-y-4">
+        <div><label class="label" for="l-email">Email</label><input id="l-email" class="input" type="email" autocomplete="username" value="patient@example.com"></div>
+        <div><label class="label" for="l-pass">Password</label><input id="l-pass" class="input" type="password" autocomplete="current-password" placeholder="Demo password: Demo@1234"></div>
+        <p id="l-msg" class="err" role="alert">Invalid email or password.</p>
+        <button class="btn btn-primary w-full" id="l-btn" type="submit">Log in</button>
+      </form>
+      <p class="mt-3 text-xs text-slate-500">Failed attempts: <b id="l-count">0</b> / 5 · one general error, never says which part was wrong.</p>
+      <div id="l-lock" class="mt-4 hidden rounded-xl bg-rose-50 p-4 text-sm text-rose-800 ring-1 ring-rose-200" role="alert">
+        <p class="font-bold">🔒 Account locked</p>
+        <p class="mt-1">Too many failed logins. Try again in <b id="l-timer">15:00</b> or contact support.</p>
+      </div>
+      <button type="button" id="l-reset" class="btn btn-ghost btn-sm mt-3">Reset demo</button>
+    </article>
+
+    <!-- LIVE QUEUE -->
+    <article class="card" id="s-queue">
+      <div class="mb-4 flex items-center justify-between gap-2"><h3 class="font-bold text-slate-900">2 · Live queue (RT-01, RT-04)</h3><span class="badge b-green"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>Live</span></div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="rounded-xl bg-violet-50 p-4 ring-1 ring-violet-200">
+          <p class="text-xs font-bold uppercase tracking-wide text-violet-700">Doctor screen</p>
+          <p class="mt-2 text-sm text-slate-700">Session in progress · 10 booked</p>
+          <button class="btn btn-primary mt-3 w-full" id="q-next">Call next patient</button>
+          <button class="btn btn-ghost btn-sm mt-2" id="q-reset" type="button">Reset demo</button>
+        </div>
+        <div class="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-200" aria-live="polite">
+          <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">Patient screen</p>
+          <p class="mt-2 text-xs text-slate-600">Now serving</p>
+          <p id="q-serving" class="text-5xl font-extrabold text-emerald-700">3</p>
+          <p class="mt-1 text-sm text-slate-700">Your number: <b>No. 7</b></p>
+          <p class="text-sm text-slate-700">Numbers away: <b id="q-away">4</b> · Patients before you: <b id="q-before">3</b></p>
+          <div class="mt-3 h-2 overflow-hidden rounded-full bg-emerald-100"><div id="q-bar" class="h-full rounded-full bg-emerald-600 transition-all" style="width:43%"></div></div>
+          <p id="q-msg" class="mt-2 text-xs font-semibold text-emerald-800">Please stay nearby.</p>
+        </div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">Press the doctor button: the patient sees the new number instantly. At 3 numbers away and when called, a notification appears, sent only to that patient.</p>
+    </article>
+
+    <!-- REGISTER -->
+    <article class="card lg:col-span-2" id="s-register">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-900">3 · Register (BR-10)</h3><span class="badge b-slate">Guest → creates a CUSTOMER</span></div>
+      <form id="regForm" novalidate>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div><label class="label" for="r-name">Full name *</label><input id="r-name" class="input" autocomplete="name" placeholder="Mohamed Fahim"><p class="err" id="e-name"></p></div>
+          <div><label class="label" for="r-nic">NIC *</label><input id="r-nic" class="input" inputmode="text" placeholder="901234567V or 200012345678"><p class="err" id="e-nic"></p></div>
+          <div><label class="label" for="r-dob">Date of birth *</label><input id="r-dob" class="input" type="date"><p class="err" id="e-dob"></p></div>
+          <div><label class="label" for="r-gender">Gender *</label><select id="r-gender" class="input"><option value="">Select…</option><option>Male</option><option>Female</option><option>Other</option></select><p class="err" id="e-gender"></p></div>
+          <div><label class="label" for="r-phone">Phone *</label><input id="r-phone" class="input" type="tel" autocomplete="tel" placeholder="07XXXXXXXX"><p class="err" id="e-phone"></p></div>
+          <div><label class="label" for="r-email">Email *</label><input id="r-email" class="input" type="email" autocomplete="email" placeholder="name@example.com"><p class="err" id="e-email"></p></div>
+          <div class="sm:col-span-2 lg:col-span-3"><label class="label" for="r-address">Address *</label><input id="r-address" class="input" autocomplete="street-address" placeholder="123, Galle Road, Kalutara"><p class="err" id="e-address"></p></div>
+          <div><label class="label" for="r-password">Password *</label>
+            <div class="relative"><input id="r-password" class="input pr-16" type="password" autocomplete="new-password"><button type="button" id="r-eye" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50" aria-pressed="false">Show</button></div>
+            <p class="err" id="e-password"></p></div>
+          <div><label class="label" for="r-confirm">Confirm password *</label><input id="r-confirm" class="input" type="password" autocomplete="new-password"><p class="err" id="e-confirm"></p></div>
+          <ul class="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 ring-1 ring-slate-200" aria-label="Password rules">
+            <li id="pr-len">○ 8 or more characters</li><li id="pr-let">○ A letter</li><li id="pr-num">○ A number</li><li id="pr-sym">○ A symbol</li>
+          </ul>
+        </div>
+        <div class="mt-5 flex flex-wrap items-center gap-3"><button class="btn btn-primary" type="submit">Create account</button><span class="text-xs text-slate-500">NIC and email must be unique. Personal data is encrypted at rest (AES-256-GCM).</span></div>
+      </form>
+    </article>
+
+    <!-- BOOKING -->
+    <article class="card lg:col-span-2" id="s-book">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-900">4 · Book an appointment (BR-03 to BR-06, RT-02)</h3><span class="badge b-green">Patient</span></div>
+      <ol class="mb-5 flex items-center gap-2 text-xs font-semibold" id="steps" aria-label="Booking steps"></ol>
+      <div class="grid gap-6 lg:grid-cols-5">
+        <div class="lg:col-span-3">
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+            <div class="grid h-12 w-12 place-items-center rounded-full bg-violet-100 text-sm font-extrabold text-violet-700">AP</div>
+            <div><p class="font-bold text-slate-900">Dr. A. Perera</p><p class="text-sm text-slate-600">Cardiology · SLMC 12345 · ★ 4.8 (128 reviews)</p></div>
+          </div>
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <div class="inline-flex rounded-xl bg-slate-100 p-1 text-sm font-semibold" role="group" aria-label="Session type">
+              <button type="button" id="t-phys" class="rounded-lg bg-white px-4 py-1.5 text-brand-700 shadow-sm" aria-pressed="true">Physical</button>
+              <button type="button" id="t-onl" class="rounded-lg px-4 py-1.5 text-slate-600" aria-pressed="false">Online (chat)</button>
+            </div>
+            <button type="button" id="sim-other" class="btn btn-ghost btn-sm">Simulate another patient booking</button>
+          </div>
+          <fieldset class="mt-4"><legend class="sr-only">Available sessions</legend><div id="sessList" class="space-y-3"></div></fieldset>
+        </div>
+        <div class="lg:col-span-2">
+          <label class="label" for="b-reason">Reason for visit *</label>
+          <textarea id="b-reason" rows="4" maxlength="300" class="input" placeholder="Fever and body pain for two days"></textarea>
+          <div class="mt-1 flex justify-between text-xs text-slate-500"><span>🔒 Only you and the treating doctor can read this.</span><span id="b-count">0/300</span></div>
+          <p class="err" id="b-err" role="alert"></p>
+          <button type="button" id="b-btn" class="btn btn-primary mt-4 w-full">Book appointment</button>
+          <div id="bookResult" class="mt-4" aria-live="polite"></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- MY APPOINTMENTS / CANCEL -->
+    <article class="card" id="s-cancel">
+      <div class="mb-4 flex items-center justify-between gap-2"><h3 class="font-bold text-slate-900">5 · My appointments &amp; cancel (BR-07)</h3><span class="badge b-green">Patient</span></div>
+      <div class="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+        <div class="flex flex-wrap items-center justify-between gap-2"><p class="font-bold text-slate-900">No. 7 · Dr. A. Perera <span class="font-normal text-slate-500">· Cardiology</span></p><div id="ap-badges" class="flex gap-2"></div></div>
+        <p class="mt-1 text-sm text-slate-600">Wed 18 Nov 2026 · 3:00 PM · Physical · Room 3 · LKR 2,500</p>
+        <p class="mt-3 text-sm text-slate-700" id="ap-why" aria-live="polite"></p>
+        <button id="ap-cancel" class="btn btn-danger mt-3">Cancel appointment</button>
+      </div>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <div><label class="label" for="ap-pay">Demo: payment status</label><select id="ap-pay" class="input"><option value="PENDING">Unpaid (PENDING)</option><option value="PAID">PAID</option></select></div>
+        <div><label class="label" for="ap-hours">Demo: hours until session · <b id="ap-hoursOut">24 h</b></label><input id="ap-hours" type="range" min="0" max="24" value="24" class="w-full accent-brand-600"></div>
+      </div>
+      <button id="ap-reset" class="btn btn-ghost btn-sm mt-2" type="button">Reset demo</button>
+    </article>
+
+    <!-- NOTIFICATIONS -->
+    <article class="card" id="s-notif">
+      <div class="mb-4 flex items-center justify-between gap-2"><h3 class="font-bold text-slate-900">6 · Notifications (RT-04)</h3><div class="flex gap-2"><button class="btn btn-secondary btn-sm" id="n-all" aria-pressed="true">All</button><button class="btn btn-secondary btn-sm" id="n-unread" aria-pressed="false">Unread <span id="n-count"></span></button></div></div>
+      <ul id="n-list" class="divide-y divide-slate-100"></ul>
+      <button class="btn btn-ghost btn-sm mt-3" id="n-read">Mark all as read</button>
+    </article>
+
+    <!-- CHAT -->
+    <article class="card" id="s-chat">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div><h3 class="font-bold text-slate-900">7 · Consultation chat (RT-03, BR-09)</h3><p class="text-xs text-slate-500">Dr. A. Perera · Online appointment No. 2</p></div>
+        <span id="c-conn" class="badge b-green"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Connected</span>
+      </div>
+      <div id="c-log" class="h-64 space-y-2 overflow-y-auto rounded-xl bg-white p-3 ring-1 ring-slate-200" aria-live="polite"></div>
+      <div id="c-typing" class="mt-1 hidden h-5 text-xs text-slate-500" aria-live="polite"><span class="dots"><span></span><span></span><span></span></span>Dr. Perera is typing…</div>
+      <div id="c-ended" class="mt-2 hidden rounded-xl bg-slate-100 p-3 text-sm text-slate-700">🔒 <b>Consultation ended.</b> This chat is read-only. You can read your summary below.</div>
+      <div class="mt-2"><label class="sr-only" for="c-input">Message</label>
+        <div class="flex gap-2"><textarea id="c-input" rows="1" maxlength="1000" class="input resize-none" placeholder="Type a message…"></textarea><button id="c-send" class="btn btn-primary" disabled>Send</button></div>
+        <div class="mt-1 flex justify-between text-xs text-slate-500"><span id="c-status">Messages are encrypted at rest.</span><span id="c-count">0/1000</span></div></div>
+      <div class="mt-3 flex flex-wrap gap-2"><button id="c-drop" class="btn btn-secondary btn-sm" type="button">Simulate network drop</button><button id="c-end" class="btn btn-secondary btn-sm" type="button">End consultation (doctor)</button><button id="c-reset" class="btn btn-ghost btn-sm" type="button">Reset</button></div>
+    </article>
+
+    <!-- SUMMARY + FEEDBACK -->
+    <article class="card" id="s-summary">
+      <div class="mb-4 flex items-center justify-between gap-2"><h3 class="font-bold text-slate-900">8 · Summary, prescription &amp; feedback</h3><button class="btn btn-secondary btn-sm" id="printBtn">🖨 Print</button></div>
+      <div id="summary-print" class="rounded-xl bg-white p-4 ring-1 ring-slate-200">
+        <div class="flex items-center justify-between"><p class="font-extrabold text-brand-900">MediChannel · Consultation summary</p><span class="text-xs text-slate-500">18 Nov 2026 · 3:30 PM</span></div>
+        <dl class="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
+          <dt class="text-slate-500">Doctor</dt><dd class="col-span-2 font-medium">Dr. A. Perera, Cardiology</dd>
+          <dt class="text-slate-500">Diagnosis</dt><dd class="col-span-2 font-medium">Viral fever</dd>
+          <dt class="text-slate-500">Advice</dt><dd class="col-span-2">Rest and hydration for 3 days. Review if fever persists.</dd>
+        </dl>
+        <table class="mt-3 w-full text-left text-sm"><thead><tr class="border-b border-slate-200 text-xs uppercase text-slate-500"><th class="py-1.5">Medicine</th><th>Dose</th><th>Duration</th></tr></thead>
+          <tbody><tr class="border-b border-slate-100"><td class="py-1.5">Paracetamol 500 mg</td><td>1 tablet every 8 h</td><td>3 days</td></tr><tr><td class="py-1.5">ORS sachet</td><td>As needed</td><td>3 days</td></tr></tbody></table>
+        <p class="mt-3 text-[11px] text-slate-400">Sample data with fictional people only.</p>
+      </div>
+      <form id="fbForm" class="mt-4">
+        <p class="label">Rate your visit (one feedback per appointment)</p>
+        <div id="stars" class="flex gap-1" role="radiogroup" aria-label="Rating 1 to 5"></div>
+        <label class="label mt-3" for="fb-text">Comment</label><textarea id="fb-text" rows="2" maxlength="300" class="input" placeholder="Great service!"></textarea>
+        <p class="err" id="fb-err" role="alert"></p>
+        <button class="btn btn-primary mt-3" id="fb-btn" type="submit">Submit feedback</button>
+      </form>
+    </article>
+
+    <!-- DOCTOR -->
+    <article class="card lg:col-span-2" id="s-doctor">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-900">9 · Doctor: session management (BR-08, BR-09)</h3><span class="badge b-violet">Doctor</span></div>
+      <div class="flex flex-wrap items-center gap-3 rounded-xl bg-violet-50 p-3 ring-1 ring-violet-200">
+        <div><p class="font-bold text-slate-900">Wed 18 Nov 2026 · 3:00–6:00 PM · Room 3</p><p class="text-xs text-slate-600">Mixed session · 6 appointments</p></div>
+        <span id="d-status" class="ml-auto"></span>
+        <button class="btn btn-primary btn-sm" id="d-start">Start session</button>
+        <button class="btn btn-secondary btn-sm" id="d-next">Call next</button>
+        <button class="btn btn-danger btn-sm" id="d-end">End session</button>
+      </div>
+      <p id="d-note" class="mt-2 text-xs text-slate-500" aria-live="polite"></p>
+      <div class="mt-3 overflow-x-auto rounded-xl ring-1 ring-slate-200">
+        <table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="th">No.</th><th class="th">Patient</th><th class="th">Type</th><th class="th">Check-in</th><th class="th">Status</th><th class="th">Reason 🔒</th><th class="th">Action</th></tr></thead><tbody id="d-body" class="divide-y divide-slate-100"></tbody></table>
+      </div>
+      <form id="d-form" class="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200 md:grid-cols-3">
+        <div><label class="label" for="d-diag">Diagnosis summary</label><input id="d-diag" class="input" disabled placeholder="Viral fever"></div>
+        <div><label class="label" for="d-adv">Advice</label><input id="d-adv" class="input" disabled placeholder="Rest and fluids"></div>
+        <div><label class="label" for="d-rx">Prescription</label><input id="d-rx" class="input" disabled placeholder="Paracetamol 500 mg, 3 days"></div>
+        <p class="err md:col-span-3" id="d-err" role="alert"></p>
+        <div class="md:col-span-3"><button class="btn btn-success" id="d-save" disabled type="submit">Save notes &amp; complete</button><span class="ml-3 text-xs text-slate-500">Notes are encrypted (AES-256-GCM). Only the patient and you can read them.</span></div>
+      </form>
+    </article>
+
+    <!-- MANAGER: RECEPTION -->
+    <article class="card lg:col-span-2" id="s-reception">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-900">10 · Manager: reception</h3><span class="badge b-amber">Manager</span></div>
+      <div class="mb-3 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200"><span aria-hidden="true">🔒</span><p><b>Privacy rule:</b> managers never see reasons for visit, notes, prescriptions or chat. The server removes those fields, the screen only shows “Hidden”.</p></div>
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="min-w-[12rem] flex-1"><label class="label" for="w-name">Walk-in patient name</label><input id="w-name" class="input" placeholder="Full name"><p class="err" id="w-e1"></p></div>
+        <div class="min-w-[10rem]"><label class="label" for="w-phone">Phone</label><input id="w-phone" class="input" placeholder="07XXXXXXXX"><p class="err" id="w-e2"></p></div>
+        <button class="btn btn-primary" id="w-btn" type="button">Book walk-in</button>
+      </div>
+      <p class="err mt-2" id="w-e3" role="alert"></p>
+      <div class="mt-4 overflow-x-auto rounded-xl ring-1 ring-slate-200"><table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="th">No.</th><th class="th">Patient</th><th class="th">Type</th><th class="th">Status</th><th class="th">Check-in</th><th class="th">Payment</th><th class="th">Reason</th></tr></thead><tbody id="r-body" class="divide-y divide-slate-100"></tbody></table></div>
+    </article>
+
+    <!-- MANAGER: CREATE SESSION -->
+    <article class="card" id="s-create">
+      <div class="mb-4 flex items-center justify-between gap-2"><h3 class="font-bold text-slate-900">11 · Manager: create session (BR-01, BR-02)</h3><span class="badge b-amber">Manager</span></div>
+      <form id="csForm" novalidate class="grid gap-3 sm:grid-cols-2">
+        <div><label class="label" for="cs-doc">Doctor</label><select id="cs-doc" class="input"><option>Dr. A. Perera</option><option>Dr. N. Silva</option></select></div>
+        <div><label class="label" for="cs-date">Date</label><input id="cs-date" type="date" class="input" value="2026-11-18"></div>
+        <div><label class="label" for="cs-start">Start</label><input id="cs-start" type="time" class="input" value="16:00"></div>
+        <div><label class="label" for="cs-end">End</label><input id="cs-end" type="time" class="input" value="18:00"><p class="err" id="cs-e-end"></p></div>
+        <div><label class="label" for="cs-type">Type</label><select id="cs-type" class="input"><option value="PHYSICAL">Physical</option><option value="ONLINE">Online</option></select></div>
+        <div id="cs-roomwrap"><label class="label" for="cs-room">Room</label><select id="cs-room" class="input"><option value="">Select room…</option><option>Room 1</option><option>Room 2</option><option>Room 3</option></select><p class="err" id="cs-e-room"></p></div>
+        <div><label class="label" for="cs-max">Max patients (1–60)</label><input id="cs-max" type="number" class="input" value="12"><p class="err" id="cs-e-max"></p></div>
+        <div><label class="label" for="cs-per">Minutes per patient (5–30)</label><input id="cs-per" type="number" class="input" value="10"><p class="err" id="cs-e-per"></p></div>
+        <div><label class="label" for="cs-fee">Fee (LKR)</label><input id="cs-fee" type="number" class="input" value="2500"><p class="err" id="cs-e-fee"></p></div>
+        <div class="sm:col-span-2"><p class="err" id="cs-e-overlap" role="alert"></p><button class="btn btn-primary" type="submit">Create session</button>
+          <p class="mt-2 text-xs text-slate-500">Existing on 18 Nov: Dr. A. Perera 3:00–6:00 PM in Room 3 · Dr. N. Silva 3:00–5:00 PM in Room 2.</p></div>
+      </form>
+    </article>
+
+    <!-- MANAGER: DELAY / CANCEL -->
+    <article class="card" id="s-delay">
+      <div class="mb-4 flex items-center justify-between gap-2"><h3 class="font-bold text-slate-900">12 · Manager: delay or cancel (BR-06)</h3><span class="badge b-amber">Manager</span></div>
+      <p class="text-sm text-slate-700">Wed 18 Nov · 3:00–6:00 PM · Dr. A. Perera · 5 min per patient</p>
+      <label class="label mt-4" for="dl-min">Delay · <b id="dl-out">0 min</b></label>
+      <input id="dl-min" type="range" min="0" max="60" step="5" value="0" class="w-full accent-brand-600">
+      <div class="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+        <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p class="text-xs text-slate-500">No. 1</p><p class="font-bold" id="dl-1">3:00 PM</p></div>
+        <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p class="text-xs text-slate-500">No. 7</p><p class="font-bold" id="dl-7">3:30 PM</p></div>
+        <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p class="text-xs text-slate-500">No. 10</p><p class="font-bold" id="dl-10">3:45 PM</p></div>
+      </div>
+      <p class="mt-2 text-xs text-slate-500">Estimated time = start + (number − 1) × minutes per patient + delay.</p>
+      <div class="mt-4 flex flex-wrap gap-2"><button class="btn btn-primary btn-sm" id="dl-apply">Apply delay &amp; notify patients</button><button class="btn btn-danger btn-sm" id="dl-cancel">Cancel session</button></div>
+    </article>
+
+    <!-- MANAGER: DASHBOARD -->
+    <article class="card lg:col-span-2" id="s-dash">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-900">13 · Manager: dashboard &amp; moderation</h3><span class="badge b-amber">Manager</span></div>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-xl bg-brand-50 p-4 ring-1 ring-brand-200"><p class="text-xs font-semibold text-brand-800">Appointments (7 days)</p><p class="mt-1 text-3xl font-extrabold text-brand-900">283</p></div>
+        <div class="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-200"><p class="text-xs font-semibold text-emerald-800">Revenue (7 days)</p><p class="mt-1 text-2xl font-extrabold text-emerald-900">LKR 184,500</p></div>
+        <div class="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200"><p class="text-xs font-semibold text-amber-800">No-show rate</p><p class="mt-1 text-3xl font-extrabold text-amber-900">6.4%</p></div>
+        <div class="rounded-xl bg-violet-50 p-4 ring-1 ring-violet-200"><p class="text-xs font-semibold text-violet-800">Physical vs online</p><div class="mt-3 flex h-3 overflow-hidden rounded-full bg-violet-200" role="img" aria-label="68 percent physical, 32 percent online"><div class="bg-violet-700" style="width:68%"></div></div><p class="mt-2 text-xs text-violet-900">68% physical · 32% online</p></div>
+      </div>
+      <div class="mt-5 grid gap-6 lg:grid-cols-3">
+        <div class="lg:col-span-1"><p class="mb-2 text-sm font-bold text-slate-900">Appointments per day</p><div id="bars" class="flex h-40 items-end gap-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"></div></div>
+        <div class="lg:col-span-1"><p class="mb-2 text-sm font-bold text-slate-900">Today's sessions (live)</p><ul id="todaySess" class="space-y-2 text-sm"></ul>
+          <p class="mb-2 mt-4 text-sm font-bold text-slate-900">Top doctors</p><ul id="topDocs" class="space-y-1.5 text-sm"></ul></div>
+        <div class="lg:col-span-1"><p class="mb-2 text-sm font-bold text-slate-900">Feedback moderation</p><ul id="fbMod" class="space-y-2 text-sm"></ul>
+          <p class="mb-2 mt-4 text-sm font-bold text-slate-900">Publish notice</p>
+          <div class="flex gap-2"><input id="nt-in" class="input" placeholder="Pharmacy open until 8 PM"><button class="btn btn-primary btn-sm" id="nt-btn">Publish</button></div><p class="err" id="nt-err"></p><ul id="ntList" class="mt-2 space-y-1 text-xs text-slate-600"></ul></div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">All numbers are calculated in the backend with SQL or JPA queries. The page only displays them.</p>
+    </article>
+
+    <!-- ADMIN -->
+    <article class="card lg:col-span-2" id="s-admin">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold text-slate-900">14 · Admin: accounts &amp; audit log</h3><span class="badge b-rose">Admin</span></div>
+      <div class="grid gap-6 lg:grid-cols-2">
+        <div>
+          <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1"><label class="label" for="a-search">Search users</label><input id="a-search" class="input" placeholder="Search by name or role"></div>
+          </div>
+          <div class="mt-3 overflow-x-auto rounded-xl ring-1 ring-slate-200"><table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="th">User</th><th class="th">Role</th><th class="th">Status</th><th class="th">Action</th></tr></thead><tbody id="a-body" class="divide-y divide-slate-100"></tbody></table></div>
+          <form id="a-form" class="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200 sm:grid-cols-3" novalidate>
+            <div class="sm:col-span-3 text-sm font-bold text-slate-900">Create staff account</div>
+            <div><label class="label" for="a-role">Role</label><select id="a-role" class="input"><option>DOCTOR</option><option>MANAGER</option></select></div>
+            <div class="sm:col-span-2"><label class="label" for="a-name">Full name</label><input id="a-name" class="input" placeholder="Dr. K. Jayawardena"><p class="err" id="a-err"></p></div>
+            <div class="sm:col-span-3"><button class="btn btn-primary btn-sm" type="submit">Create &amp; generate temporary password</button></div>
+          </form>
+        </div>
+        <div>
+          <p class="mb-2 text-sm font-bold text-slate-900">Audit log <span class="font-normal text-slate-500">· read-only, never contains medical data</span></p>
+          <div class="overflow-x-auto rounded-xl ring-1 ring-slate-200"><table class="w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="th">Time</th><th class="th">User</th><th class="th">Action</th><th class="th">IP</th></tr></thead><tbody id="audit" class="divide-y divide-slate-100"></tbody></table></div>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- 05 STATES -->
+<section id="states" class="scroll-mt-20 border-t border-slate-200 py-14">
+  <div class="mb-8"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">05 · UI states</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">Loading, error, empty and blocked</h2>
+  <p class="mt-2 max-w-3xl text-slate-600">Every screen needs these. Messages say what happened and what to do next, with no technical details or personal data.</p></div>
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="card"><p class="text-xs font-bold uppercase text-slate-500">Loading</p><div class="mt-3 space-y-2" aria-busy="true"><div class="skel h-4 w-2/3 rounded"></div><div class="skel h-4 w-full rounded"></div><div class="skel h-4 w-5/6 rounded"></div><div class="skel mt-3 h-10 w-full rounded-xl"></div></div></div>
+    <div class="card text-center"><p class="text-left text-xs font-bold uppercase text-slate-500">Error</p><div class="mx-auto mt-3 grid h-12 w-12 place-items-center rounded-full bg-rose-100 text-xl text-rose-600">!</div><p class="mt-3 font-bold">Something went wrong</p><p class="text-sm text-slate-600">We could not load your appointments. Please try again.</p><button class="btn btn-primary btn-sm mt-3" onclick="toast('Retrying…')">Retry</button></div>
+    <div class="card text-center"><p class="text-left text-xs font-bold uppercase text-slate-500">Empty</p><div class="mx-auto mt-3 grid h-12 w-12 place-items-center rounded-full bg-brand-50 text-xl">📅</div><p class="mt-3 font-bold">No appointments yet</p><p class="text-sm text-slate-600">Book your first channelling in under a minute.</p><a href="#s-book" class="btn btn-primary btn-sm mt-3">Book now</a></div>
+    <div class="card text-center"><p class="text-left text-xs font-bold uppercase text-slate-500">Session full</p><div class="mx-auto mt-3 grid h-12 w-12 place-items-center rounded-full bg-amber-100 text-xl">👥</div><p class="mt-3 font-bold">This session is full</p><p class="text-sm text-slate-600">All numbers are taken. Please choose another session.</p><button class="btn btn-secondary btn-sm mt-3" disabled>Fully booked</button></div>
+    <div class="card text-center"><p class="text-left text-xs font-bold uppercase text-slate-500">Locked account</p><div class="mx-auto mt-3 grid h-12 w-12 place-items-center rounded-full bg-rose-100 text-xl">🔒</div><p class="mt-3 font-bold">Account locked</p><p class="text-sm text-slate-600">Too many failed logins. Try again in <b id="st-timer">15:00</b>.</p></div>
+    <div class="card text-center"><p class="text-left text-xs font-bold uppercase text-slate-500">403 Forbidden</p><div class="mx-auto mt-3 grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-xl">⛔</div><p class="mt-3 font-bold">You don't have access</p><p class="text-sm text-slate-600">This page is for managers. Your role cannot open it.</p><a href="#top" class="btn btn-secondary btn-sm mt-3">Go to my dashboard</a></div>
+    <div class="card sm:col-span-2 lg:col-span-3"><p class="text-xs font-bold uppercase text-slate-500">Connection lost (WebSocket)</p>
+      <div class="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200" role="status"><svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity=".25"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" stroke-width="4"/></svg><p><b>Reconnecting…</b> Live updates are paused. We will reconnect automatically, you do not need to refresh.</p></div></div>
+  </div>
+</section>
+
+<!-- 06 RESPONSIVE -->
+<section id="responsive" class="scroll-mt-20 border-t border-slate-200 py-14">
+  <div class="mb-8"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">06 · Responsive</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">Phone layout</h2></div>
+  <div class="grid items-center gap-8 md:grid-cols-2">
+    <div class="mx-auto w-[300px] overflow-hidden rounded-[2.2rem] border-[10px] border-slate-900 bg-slate-50 shadow-xl">
+      <div class="bg-brand-700 px-4 pb-4 pt-5 text-white"><p class="text-xs text-brand-200">Welcome back</p><p class="font-bold">Mohamed Fahim</p></div>
+      <div class="space-y-3 p-3">
+        <div class="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200"><p class="text-xs font-semibold text-emerald-700">● Live queue</p><div class="mt-1 flex items-end justify-between"><div><p class="text-[11px] text-slate-500">Now serving</p><p class="text-3xl font-extrabold">4</p></div><div class="text-right"><p class="text-[11px] text-slate-500">Your number</p><p class="text-3xl font-extrabold text-brand-700">7</p></div></div></div>
+        <div class="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200"><div class="flex items-center justify-between"><p class="text-sm font-bold">Dr. A. Perera</p><span class="badge b-blue">Booked</span></div><p class="text-xs text-slate-600">Wed 18 Nov · 3:30 PM · Room 3</p><button class="btn btn-secondary mt-2 w-full" style="min-height:44px">Cancel appointment</button></div>
+        <button class="btn btn-primary w-full" style="min-height:44px">Book appointment</button>
+      </div>
+      <nav class="grid grid-cols-4 border-t border-slate-200 bg-white text-center text-[11px] font-semibold text-slate-500" aria-label="Phone navigation"><span class="py-2 text-brand-700">🏠<br>Home</span><span class="py-2">📅<br>Visits</span><span class="py-2">🔔<br>Alerts</span><span class="py-2">👤<br>Profile</span></nav>
+    </div>
+    <ul class="space-y-3 text-sm text-slate-700">
+      <li class="card !p-4"><b>One column.</b> Forms and cards stack. Sticky primary action at the bottom of the screen.</li>
+      <li class="card !p-4"><b>Bottom navigation</b> for patients and doctors on phones, sidebar on desktop (lg and up).</li>
+      <li class="card !p-4"><b>Tables scroll sideways</b> or become stacked cards under 640 px.</li>
+      <li class="card !p-4"><b>44 px touch targets,</b> 16 px side gutters, no horizontal page scroll.</li>
+      <li class="card !p-4"><b>Chat</b> keeps the input pinned above the keyboard and shows the connection badge in the header.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 07 COVERAGE -->
+<section id="coverage" class="scroll-mt-20 border-t border-slate-200 py-14">
+  <div class="mb-8"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">07 · Spec coverage</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">Where each rule is shown</h2></div>
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+    <a href="#s-create" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-01</b> Session fields, max 1–60, 5–30 min, room only for physical</a>
+    <a href="#s-create" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-02</b> Doctor and room overlap blocked</a>
+    <a href="#s-book" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-03</b> Numbers never exceed the maximum, last number handled</a>
+    <a href="#s-book" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-04</b> One active appointment per session</a>
+    <a href="#s-book" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-05</b> Booking closes 1 h (physical) or 30 min (online) before</a>
+    <a href="#s-delay" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-06</b> Estimated time formula, delay recalculates</a>
+    <a href="#s-cancel" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-07</b> Cancel only unpaid, 3 h before, record kept</a>
+    <a href="#s-doctor" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-08</b> Status flow BOOKED → ARRIVED → IN_CONSULTATION → COMPLETED / NO_SHOW</a>
+    <a href="#s-chat" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-09</b> Chat opens when doctor starts, read-only after</a>
+    <a href="#s-register" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-10</b> NIC, phone, email, password rules with inline errors</a>
+    <a href="#foundations" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">BR-11</b> LKR, Asia/Colombo, history kept (status changes)</a>
+    <a href="#s-queue" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">RT-01</b> Live “now serving”</a>
+    <a href="#s-book" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">RT-02</b> Live numbers left</a>
+    <a href="#s-chat" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">RT-03</b> Chat: typing, connection status, 1000 chars</a>
+    <a href="#s-notif" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">RT-04</b> Called, 3 away, delayed, cancelled, started</a>
+    <a href="#s-reception" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">Privacy</b> Manager and Admin never see medical data</a>
+    <a href="#s-login" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">Security</b> One login error, 5 fails lock 15 minutes</a>
+    <a href="#states" class="card !p-4 hover:ring-brand-300"><b class="text-brand-700">States</b> Loading, error, empty, full, locked, 403, offline</a>
+  </div>
+</section>
+
+<!-- 08 TOKENS -->
+<section id="tokens" class="scroll-mt-20 border-t border-slate-200 py-14">
+  <div class="mb-6"><p class="text-xs font-bold uppercase tracking-widest text-brand-600">08 · Use it in Next.js</p>
+  <h2 class="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl">Tailwind config</h2>
+  <p class="mt-2 max-w-3xl text-slate-600">Copy the colours and font into <code class="rounded bg-slate-100 px-1">tailwind.config.ts</code>, then turn each component class into a React component.</p></div>
+  <div class="relative"><button id="copyCfg" class="btn btn-secondary btn-sm absolute right-3 top-3">Copy</button>
+<pre id="cfg" class="overflow-x-auto rounded-2xl bg-slate-900 p-5 text-xs leading-relaxed text-slate-100"><code>import type { Config } from "tailwindcss";
+
+export default {
+  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  theme: {
+    extend: {
+      fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"] },
+      colors: {
+        brand: {
+          50: "#eff6ff", 100: "#dbeafe", 200: "#bfdbfe", 300: "#93c5fd", 400: "#60a5fa",
+          500: "#3b82f6", 600: "#2563eb", 700: "#1d4ed8", 800: "#1e40af", 900: "#1e3a8a",
+        },
+      },
+    },
+  },
+} satisfies Config;</code></pre></div>
+</section>
+</main>
+
+<footer class="border-t border-slate-200 bg-white py-8 text-center text-xs text-slate-500">MediChannel Design System v1.0 · All people, numbers and records on this page are fictional.</footer>
+
+<!-- shared dialog + toasts -->
+<dialog id="dlg" class="w-[min(28rem,92vw)] rounded-2xl p-0 shadow-2xl backdrop:bg-slate-900/50" aria-labelledby="dlg-title">
+  <div class="p-6"><h3 id="dlg-title" class="text-lg font-bold text-slate-900">Confirm</h3><p id="dlg-body" class="mt-2 text-sm text-slate-600"></p>
+    <div class="mt-6 flex justify-end gap-2"><button class="btn btn-secondary" id="dlg-cancel" type="button">Keep it</button><button class="btn btn-danger" id="dlg-ok" type="button">Confirm</button></div></div>
+</dialog>
+<div id="toasts" aria-live="polite" class="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"></div>
+
+<script>
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LKR=n=>'LKR '+Number(n).toLocaleString('en-US');
+const toMin=t=>{const [h,m]=t.split(':').map(Number);return h*60+m};
+const fmt=m=>{m=((m%1440)+1440)%1440;let h=Math.floor(m/60);const mm=String(m%60).padStart(2,'0'),ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+mm+' '+ap};
+const nowCol=()=>new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Colombo'});
+const BADGE={BOOKED:['b-blue','Booked'],ARRIVED:['b-cyan','Arrived'],IN_CONSULTATION:['b-violet','In consultation'],COMPLETED:['b-green','Completed'],NO_SHOW:['b-amber','No-show'],CANCELLED:['b-slate','Cancelled'],SCHEDULED:['b-slate','Scheduled'],OPEN:['b-green','Open'],IN_PROGRESS:['b-violet','In progress'],PENDING:['b-amber','Payment pending'],PAID:['b-green','Paid']};
+const badge=k=>`<span class="badge ${BADGE[k][0]}">${BADGE[k][1]}</span>`;
+function toast(msg){const el=document.createElement('div');el.setAttribute('role','status');el.className='pointer-events-auto flex items-start gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl';el.innerHTML='<span aria-hidden="true">🔔</span><span></span>';el.lastChild.textContent=msg;$('#toasts').appendChild(el);setTimeout(()=>el.remove(),4200)}
+const dlg=$('#dlg');
+function confirmDialog(o,onOk){$('#dlg-title').textContent=o.title;$('#dlg-body').textContent=o.body;const b=$('#dlg-ok');b.textContent=o.ok;b.className='btn '+(o.danger===false?'btn-primary':'btn-danger');dlg._ok=onOk;dlg.showModal()}
+$('#dlg-ok').onclick=()=>{dlg.close();dlg._ok&&dlg._ok()};
+$('#dlg-cancel').onclick=()=>dlg.close();
+function countdown(el,secs,done){clearInterval(el._t);const tick=()=>{el.textContent=String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0');if(secs--<=0){clearInterval(el._t);done&&done()}};tick();el._t=setInterval(tick,1000)}
+countdown($('#st-timer'),899);
+
+/* ---------- foundations ---------- */
+$('#apptStatuses').innerHTML=['BOOKED','ARRIVED','IN_CONSULTATION','COMPLETED','NO_SHOW','CANCELLED'].map(k=>`<div class="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">${badge(k)}<code class="text-xs text-slate-500">${k}</code></div>`).join('');
+$('#sessStatuses').innerHTML=['SCHEDULED','OPEN','IN_PROGRESS','COMPLETED','CANCELLED'].map(k=>`<div class="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">${badge(k)}<code class="text-xs text-slate-500">${k}</code></div>`).join('');
+$('#payStatuses').innerHTML=['PENDING','PAID'].map(k=>`<div class="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">${badge(k)}<code class="text-xs text-slate-500">${k}</code></div>`).join('');
+
+/* ---------- components ---------- */
+$('#loadBtn').onclick=function(){const s=$('#loadSpin');s.classList.remove('hidden');this.disabled=true;setTimeout(()=>{s.classList.add('hidden');this.disabled=false},1600)};
+$('#toastBtn').onclick=()=>toast('You are 3 numbers away for Dr. A. Perera.');
+$('#dlgBtn').onclick=()=>confirmDialog({title:'Cancel this appointment?',body:'Your appointment is kept in your history. You cannot undo this.',ok:'Yes, cancel'},()=>toast('Appointment cancelled.'));
+$('#copyCfg').onclick=async()=>{try{await navigator.clipboard.writeText($('#cfg').innerText);toast('Config copied.')}catch(e){toast('Select the code and copy it.')}};
+
+/* ---------- flows ---------- */
+const RC={guest:{bg:'bg-slate-50',ring:'ring-slate-200',pill:'bg-slate-700',tab:'Guest'},patient:{bg:'bg-emerald-50',ring:'ring-emerald-200',pill:'bg-emerald-700',tab:'Patient'},doctor:{bg:'bg-violet-50',ring:'ring-violet-200',pill:'bg-violet-700',tab:'Doctor'},manager:{bg:'bg-amber-50',ring:'ring-amber-200',pill:'bg-amber-700',tab:'Manager'},admin:{bg:'bg-rose-50',ring:'ring-rose-200',pill:'bg-rose-700',tab:'Admin'}};
+const FLOWS={
+guest:{start:'Start',hub:'Home (public)',tasks:[['Search doctors','By name, specialisation, date and PHYSICAL / ONLINE'],['View sessions','Date, time, room, fee and numbers left, live'],['Read notices','Hospital announcements'],['Register','Always creates a CUSTOMER (BR-10)'],['Log in','One general error, 5 fails lock 15 min']],end:'Patient dashboard (after login)',note:'Every permission is still checked on the server, even for public pages.'},
+patient:{start:'Login',hub:'Patient dashboard',tasks:[['Book appointment','Type + reason for visit, get number, time, room, reference'],['My appointments','Status, payment status, now serving and patients before me'],['Cancel','Unpaid and 3 h before, with confirmation (BR-07)'],['Live queue','Now serving updates instantly (RT-01)'],['Online consultation','Private chat when the doctor starts it (RT-03)'],['Summary & prescription','Read and print after the visit'],['Give feedback','Rating 1–5 and a comment, once'],['Notifications & profile','3 away, called, delayed, cancelled']],end:'End',note:'A patient only ever sees their own appointments, summaries and chat.'},
+doctor:{start:'Login (first login: change temporary password)',hub:'Doctor dashboard',tasks:[['My sessions','Today and upcoming'],['Patient list','Number, name, type, check-in, status'],['Start session','Patients are notified live'],['Call next','Only ARRIVED (physical) or BOOKED (online)'],['Mark completed / no-show','Per patient, not per session'],['Consultation room','Private chat, typing indicator, connection status'],['Notes & prescription','Diagnosis, advice, prescription, encrypted'],['End consultation / session','Chat becomes read-only (BR-09)']],end:'End',note:'The doctor sees medical data only for their own patients (ownership check on the server).'},
+manager:{start:'Login (first login: change temporary password)',hub:'Manager dashboard',tasks:[['Specialisations & rooms','Create and edit'],['Doctor profiles','Name, SLMC number, qualifications, fee, bio'],['Sessions','Create, edit, delay, cancel (BR-01, BR-02, BR-06)'],['Reception','Search today, mark ARRIVED, record payment, walk-in booking'],['Notices','Publish hospital notices'],['Feedback moderation','Approve, hide or delete'],['Dashboard & reports','Appointments, no-show rate, revenue, top doctors'],['Delay / cancel session','Affected patients notified live']],end:'End',note:'🔒 Never shows reasons for visit, notes, prescriptions or chat (privacy rule).'},
+admin:{start:'Login',hub:'Admin dashboard',tasks:[['Create DOCTOR / MANAGER','Temporary password, shown once'],['Users','List and search'],['Activate / deactivate','Any account except your own'],['Reset staff password','Forces a change on first login'],['Audit log','Logins, account changes, cancellations, record openings'],['System dashboard','Accounts, active, suspended, log count']],end:'End',note:'🔒 Admin never sees medical data. The audit log cannot be edited and never contains medical data.'}};
+const tabs=$('#flowTabs');
+Object.keys(FLOWS).forEach((k,i)=>{const b=document.createElement('button');b.type='button';b.setAttribute('role','tab');b.dataset.k=k;b.className='btn btn-secondary';b.textContent=RC[k].tab;b.onclick=()=>renderFlow(k);tabs.appendChild(b)});
+function renderFlow(k){
+  $$('#flowTabs button').forEach(b=>{const on=b.dataset.k===k;b.setAttribute('aria-selected',on);b.className='btn '+(on?'btn-primary':'btn-secondary')});
+  const f=FLOWS[k],c=RC[k];
+  $('#flowPanel').innerHTML=`<div class="rounded-2xl ${c.bg} p-5 ring-1 ${c.ring}">
+  <div class="flex flex-wrap items-center gap-2 text-sm font-semibold"><span class="rounded-full ${c.pill} px-3 py-1 text-white">${esc(f.start)}</span><span aria-hidden="true">→</span><span class="rounded-xl bg-white px-3 py-1 ring-1 ${c.ring}">${esc(f.hub)}</span><span aria-hidden="true">→</span><span class="text-slate-500">any of</span></div>
+  <ul class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">${f.tasks.map(t=>`<li class="rounded-xl bg-white p-3 ring-1 ${c.ring}"><p class="text-sm font-bold text-slate-900">${esc(t[0])}</p><p class="mt-0.5 text-xs text-slate-600">${esc(t[1])}</p></li>`).join('')}</ul>
+  <div class="mt-4 flex items-center gap-2 text-sm font-semibold"><span aria-hidden="true">→</span><span class="rounded-full ${c.pill} px-3 py-1 text-white">${esc(f.end)}</span></div>
+  <p class="mt-4 rounded-xl bg-white/70 p-3 text-xs text-slate-700 ring-1 ${c.ring}">${f.note}</p></div>`;
+}
+renderFlow('patient');
+
+/* ---------- login ---------- */
+const L={fails:0,locked:false};
+function lockLogin(on){L.locked=on;$('#l-lock').classList.toggle('hidden',!on);['#l-email','#l-pass','#l-btn'].forEach(s=>$(s).disabled=on);if(on)countdown($('#l-timer'),900,()=>{lockLogin(false);L.fails=0;$('#l-count').textContent=0;toast('Account unlocked. You can try again.')})}
+$('#loginForm').onsubmit=e=>{e.preventDefault();if(L.locked)return;
+  if($('#l-email').value.trim()&&$('#l-pass').value==='Demo@1234'){L.fails=0;$('#l-count').textContent=0;$('#l-msg').classList.remove('show');toast('Logged in as CUSTOMER. Token is kept in an HTTP-only, Secure cookie.')}
+  else{L.fails++;$('#l-count').textContent=L.fails;$('#l-msg').classList.add('show');if(L.fails>=5)lockLogin(true)}};
+$('#l-reset').onclick=()=>{clearInterval($('#l-timer')._t);lockLogin(false);L.fails=0;$('#l-count').textContent=0;$('#l-msg').classList.remove('show');$('#l-pass').value=''};
+
+/* ---------- live queue ---------- */
+const Q={serving:3,me:7};
+function renderQ(){const away=Q.me-Q.serving;$('#q-serving').textContent=Q.serving;$('#q-away').textContent=Math.max(0,away);$('#q-before').textContent=Math.max(0,away-1);$('#q-bar').style.width=Math.min(100,Q.serving/Q.me*100)+'%';
+  $('#q-msg').textContent=away<=0?'It is your turn. Please go in.':away===3?'You are 3 numbers away. Please come to the clinic.':'Please stay nearby.';$('#q-next').disabled=away<=0}
+$('#q-next').onclick=()=>{Q.serving++;renderQ();const a=Q.me-Q.serving;if(a===3)toast('You are 3 numbers away for Dr. A. Perera.');if(a===0)toast('You are called. Please go to Room 3.')};
+$('#q-reset').onclick=()=>{Q.serving=3;renderQ()};renderQ();
+
+/* ---------- register ---------- */
+const REG={
+ name:v=>v.trim().length>=3||'Enter your full name (at least 3 characters).',
+ nic:v=>/^(\d{9}[VvXx]|\d{12})$/.test(v.trim())||'NIC must be 9 digits + V or X (901234567V), or 12 digits.',
+ dob:v=>!v?'Date of birth is required.':(new Date(v)<new Date()||'Date of birth cannot be in the future.'),
+ gender:v=>!!v||'Select a gender.',
+ phone:v=>/^07\d{8}$/.test(v.trim())||'Phone must look like 07XXXXXXXX.',
+ email:v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())||'Enter a valid email address.',
+ address:v=>v.trim().length>=10||'Address must be at least 10 characters.',
+ password:v=>/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(v)||'Use 8+ characters with a letter, a number and a symbol.',
+ confirm:v=>(v!==''&&v===$('#r-password').value)||'Passwords do not match.'};
+function checkField(k,show=true){const el=$('#r-'+k),r=REG[k](el.value),ok=r===true,er=$('#e-'+k);if(show){el.classList.toggle('invalid',!ok);el.classList.toggle('valid',ok&&el.value!=='');er.textContent=ok?'':r;er.classList.toggle('show',!ok);el.setAttribute('aria-invalid',!ok)}return ok}
+Object.keys(REG).forEach(k=>{const el=$('#r-'+k);el.addEventListener('blur',()=>checkField(k));el.addEventListener('input',()=>{if(el.classList.contains('invalid'))checkField(k)})});
+$('#r-password').addEventListener('input',e=>{const v=e.target.value,set=(id,ok,t)=>{const li=$(id);li.textContent=(ok?'✓ ':'○ ')+t;li.className=ok?'font-semibold text-emerald-700':''};set('#pr-len',v.length>=8,'8 or more characters');set('#pr-let',/[A-Za-z]/.test(v),'A letter');set('#pr-num',/\d/.test(v),'A number');set('#pr-sym',/[^A-Za-z0-9]/.test(v),'A symbol')});
+$('#r-eye').onclick=function(){const p=$('#r-password'),s=p.type==='password';p.type=s?'text':'password';this.textContent=s?'Hide':'Show';this.setAttribute('aria-pressed',s)};
+$('#regForm').onsubmit=e=>{e.preventDefault();const bad=Object.keys(REG).filter(k=>!checkField(k));if(bad.length){$('#r-'+bad[0]).focus();return}toast('Account created as CUSTOMER. Staff roles can only be created by an admin.')};
+
+/* ---------- booking ---------- */
+const SESS=[
+ {id:'S1',type:'PHYSICAL',day:'Wed 18 Nov 2026',start:'15:00',end:'18:00',room:'Room 3',fee:2500,max:10,booked:6,per:5,delay:0,cut:'1 hour'},
+ {id:'S2',type:'ONLINE',day:'Thu 19 Nov 2026',start:'09:00',end:'12:00',room:null,fee:2000,max:8,booked:2,per:15,delay:0,cut:'30 minutes'},
+ {id:'S3',type:'PHYSICAL',day:'Fri 20 Nov 2026',start:'18:00',end:'20:00',room:'Room 2',fee:2500,max:6,booked:6,per:10,delay:0,cut:'1 hour'},
+ {id:'S4',type:'ONLINE',day:'Fri 20 Nov 2026',start:'16:00',end:'18:00',room:null,fee:2000,max:8,booked:5,per:10,delay:0,cut:'30 minutes'}];
+const B={type:'PHYSICAL',sel:null,mine:new Set()};
+function setStep(n){const names=['Doctor','Session','Details','Confirm'];$('#steps').innerHTML=names.map((t,i)=>{const done=i+1<n,cur=i+1===n;return `<li class="flex flex-1 items-center gap-2 ${done||cur?'text-slate-900':'text-slate-500'}"><span class="grid h-7 w-7 shrink-0 place-items-center rounded-full ${done||cur?'bg-brand-600 text-white':'bg-slate-200 text-slate-600'}">${done?'✓':i+1}</span><span class="hidden sm:inline">${t}</span>${i<3?`<span class="h-px flex-1 ${done?'bg-brand-600':'bg-slate-300'}"></span>`:''}</li>`}).join('')}
+function renderSess(flash){
+  const list=SESS.filter(s=>s.type===B.type);
+  $('#sessList').innerHTML=list.map(s=>{const left=s.max-s.booked,full=left<=0;
+   return `<label class="block cursor-pointer ${full?'cursor-not-allowed opacity-60':''}"><input type="radio" name="sess" value="${s.id}" class="peer sr-only" ${full?'disabled':''} ${B.sel===s.id?'checked':''}>
+   <div class="rounded-xl bg-white p-4 ring-1 ring-slate-300 transition peer-checked:bg-brand-50 peer-checked:ring-2 peer-checked:ring-brand-600 peer-focus-visible:ring-4 peer-focus-visible:ring-brand-200">
+    <div class="flex flex-wrap items-center justify-between gap-2"><p class="font-bold text-slate-900">${s.day}</p><span class="badge ${full?'b-rose':left<=3?'b-amber':'b-green'} ${flash===s.id?'animate-pulse':''}">${full?'Full':left+' left'} · live</span></div>
+    <p class="mt-1 text-sm text-slate-700">${fmt(toMin(s.start))} – ${fmt(toMin(s.end))} · ${s.type==='PHYSICAL'?s.room:'Online chat · no room'} · <b>${LKR(s.fee)}</b></p>
+    <p class="mt-1 text-xs text-slate-500">Booking closes ${s.cut} before the session.</p></div></label>`}).join('');
+  $$('input[name=sess]').forEach(r=>r.onchange=()=>{B.sel=r.value;$('#b-err').classList.remove('show');setStep($('#b-reason').value.trim().length>=5?3:2)})}
+function setType(t){B.type=t;B.sel=null;$('#t-phys').className='rounded-lg px-4 py-1.5 '+(t==='PHYSICAL'?'bg-white text-brand-700 shadow-sm':'text-slate-600');$('#t-onl').className='rounded-lg px-4 py-1.5 '+(t==='ONLINE'?'bg-white text-brand-700 shadow-sm':'text-slate-600');$('#t-phys').setAttribute('aria-pressed',t==='PHYSICAL');$('#t-onl').setAttribute('aria-pressed',t==='ONLINE');$('#bookResult').innerHTML='';renderSess();setStep(1)}
+$('#t-phys').onclick=()=>setType('PHYSICAL');$('#t-onl').onclick=()=>setType('ONLINE');
+$('#b-reason').addEventListener('input',e=>{$('#b-count').textContent=e.target.value.length+'/300';if(B.sel&&e.target.value.trim().length>=5)setStep(3)});
+$('#sim-other').onclick=()=>{const s=SESS.find(x=>x.type===B.type&&x.max-x.booked>0);if(!s){toast('No open sessions to simulate.');return}s.booked++;renderSess(s.id);toast('Another patient booked. Numbers left updated live (RT-02).');if(B.sel===s.id&&s.max-s.booked<=0){B.sel=null;renderSess();$('#b-err').textContent='That session just filled up. Please pick another one.';$('#b-err').classList.add('show')}};
+$('#b-btn').onclick=()=>{
+  const err=m=>{$('#b-err').textContent=m;$('#b-err').classList.add('show')};$('#b-err').classList.remove('show');
+  const s=SESS.find(x=>x.id===B.sel);
+  if(!s)return err('Choose a session first.');
+  if($('#b-reason').value.trim().length<5)return err('Tell the doctor why you are visiting (at least 5 characters).');
+  if(s.booked>=s.max)return err('This session is full. Please choose another one.');
+  if(B.mine.has(s.id))return err('You already have an active appointment in this session (BR-04).');
+  s.booked++;const n=s.booked;B.mine.add(s.id);
+  const ref='MC-2026-'+String(Math.floor(10000+Math.random()*90000));
+  $('#bookResult').innerHTML=`<div class="rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-200"><p class="font-bold text-emerald-800">✓ Appointment booked</p>
+   <dl class="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt class="text-xs text-slate-500">Appointment number</dt><dd class="text-3xl font-extrabold text-slate-900">No. ${n}</dd></div>
+   <div><dt class="text-xs text-slate-500">Booking reference</dt><dd class="font-mono font-semibold">${ref}</dd></div>
+   <div><dt class="text-xs text-slate-500">Estimated time</dt><dd class="font-semibold">${fmt(eta(s,n))}</dd></div>
+   <div><dt class="text-xs text-slate-500">${s.type==='PHYSICAL'?'Room':'Where'}</dt><dd class="font-semibold">${s.type==='PHYSICAL'?s.room:'Online chat'}</dd></div>
+   <div><dt class="text-xs text-slate-500">Date</dt><dd class="font-semibold">${s.day}</dd></div>
+   <div><dt class="text-xs text-slate-500">Fee</dt><dd class="font-semibold">${LKR(s.fee)} · ${badge('PENDING')}</dd></div></dl>
+   <div class="mt-3 flex flex-wrap gap-2"><button class="btn btn-secondary btn-sm" onclick="toast('Added to your calendar (demo).')">Add to calendar</button><a class="btn btn-primary btn-sm" href="#s-cancel">View my appointments</a></div></div>`;
+  setStep(4);renderSess(s.id);toast('Booked: No. '+n+'. Numbers left updated for everyone viewing.')};
+const eta=(s,n)=>toMin(s.start)+(n-1)*s.per+s.delay;
+setStep(1);renderSess();
+
+/* ---------- cancel (BR-07) ---------- */
+const AP={cancelled:false};
+function renderAppt(){
+  const hrs=+$('#ap-hours').value,paid=$('#ap-pay').value==='PAID';$('#ap-hoursOut').textContent=hrs+' h';
+  $('#ap-badges').innerHTML=badge(AP.cancelled?'CANCELLED':'BOOKED')+badge(paid?'PAID':'PENDING');
+  const can=!AP.cancelled&&!paid&&hrs>=3;let why;
+  if(AP.cancelled)why='This appointment is cancelled. It stays in your history (BR-07, BR-11).';
+  else if(paid)why='Paid appointments cannot be cancelled online. Please contact reception.';
+  else if(hrs<3)why='Cancelling closes 3 hours before the session. Only '+hrs+' h left.';
+  else why='You can cancel until 3 hours before the session.';
+  $('#ap-why').textContent=why;$('#ap-cancel').disabled=!can}
+$('#ap-hours').oninput=renderAppt;$('#ap-pay').onchange=renderAppt;
+$('#ap-cancel').onclick=()=>confirmDialog({title:'Cancel this appointment?',body:'Appointment No. 7 with Dr. A. Perera on Wed 18 Nov, 3:00 PM. The record is kept, but your number is released.',ok:'Yes, cancel'},()=>{AP.cancelled=true;renderAppt();toast('Appointment cancelled. Numbers left updated live.')});
+$('#ap-reset').onclick=()=>{AP.cancelled=false;$('#ap-hours').value=24;$('#ap-pay').value='PENDING';renderAppt()};renderAppt();
+
+/* ---------- notifications ---------- */
+const NOTES=[{i:'📣',t:'You are called. Please go to Room 3.',m:'2 min ago',r:false},{i:'🔔',t:"You are 3 numbers away for Dr. A. Perera's session.",m:'10 min ago',r:false},{i:'⏱',t:'Your session is delayed by 15 min. New estimated time 3:45 PM.',m:'25 min ago',r:false},{i:'💬',t:'Dr. A. Perera started your online consultation. Join the chat.',m:'2 h ago',r:true},{i:'❌',t:'Your session on 20 Nov was cancelled by the clinic.',m:'1 day ago',r:true}];
+let nFilter='all';
+function renderNotes(){const un=NOTES.filter(n=>!n.r).length;$('#n-count').textContent='('+un+')';$('#n-all').setAttribute('aria-pressed',nFilter==='all');$('#n-unread').setAttribute('aria-pressed',nFilter==='unread');
+  $('#n-all').className='btn btn-sm '+(nFilter==='all'?'btn-primary':'btn-secondary');$('#n-unread').className='btn btn-sm '+(nFilter==='unread'?'btn-primary':'btn-secondary');
+  const list=NOTES.map((n,idx)=>({n,idx})).filter(x=>nFilter==='all'||!x.n.r);
+  $('#n-list').innerHTML=list.length?list.map(x=>`<li><button class="flex w-full items-start gap-3 py-3 text-left" data-i="${x.idx}"><span class="text-lg" aria-hidden="true">${x.n.i}</span><span class="flex-1"><span class="block text-sm ${x.n.r?'text-slate-600':'font-semibold text-slate-900'}">${esc(x.n.t)}</span><span class="text-xs text-slate-500">${x.n.m}</span></span>${x.n.r?'':'<span class="mt-1.5 h-2 w-2 rounded-full bg-brand-600" aria-label="Unread"></span>'}</button></li>`).join(''):'<li class="py-6 text-center text-sm text-slate-500">You are all caught up.</li>'}
+$('#n-list').onclick=e=>{const b=e.target.closest('button[data-i]');if(b){NOTES[b.dataset.i].r=true;renderNotes()}};
+$('#n-all').onclick=()=>{nFilter='all';renderNotes()};$('#n-unread').onclick=()=>{nFilter='unread';renderNotes()};$('#n-read').onclick=()=>{NOTES.forEach(n=>n.r=true);renderNotes()};renderNotes();
+
+/* ---------- chat ---------- */
+const CH={ended:false,online:true,i:0,replies:['Thanks for the details. Any allergies I should know about?','Understood. How long have you had these symptoms?','I will write your prescription and advice now.']};
+function addMsg(who,text){const row=document.createElement('div');row.className='flex flex-col '+(who==='me'?'items-end':'items-start');const b=document.createElement('div');b.className='max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm '+(who==='me'?'bg-brand-600 text-white':'bg-slate-100 text-slate-900');b.textContent=text;const t=document.createElement('span');t.className='mt-0.5 text-[10px] text-slate-400';t.textContent=nowCol();row.append(b,t);$('#c-log').appendChild(row);$('#c-log').scrollTop=1e6}
+function chatUi(){const off=!CH.online||CH.ended;$('#c-input').disabled=off;$('#c-send').disabled=off||!$('#c-input').value.trim();$('#c-ended').classList.toggle('hidden',!CH.ended);$('#c-end').disabled=CH.ended;$('#c-drop').disabled=CH.ended;
+  const c=$('#c-conn');if(CH.ended){c.className='badge b-slate';c.innerHTML='Ended'}else if(CH.online){c.className='badge b-green';c.innerHTML='<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Connected'}else{c.className='badge b-amber';c.innerHTML='<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>Reconnecting…'}
+  $('#c-status').textContent=!CH.online?'Reconnecting automatically. Your message will wait here.':CH.ended?'Read-only.':'Messages are encrypted at rest.'}
+function sendMsg(){const v=$('#c-input').value.trim();if(!v||CH.ended||!CH.online)return;addMsg('me',v);$('#c-input').value='';$('#c-count').textContent='0/1000';chatUi();
+  setTimeout(()=>{if(CH.ended)return;$('#c-typing').classList.remove('hidden');setTimeout(()=>{$('#c-typing').classList.add('hidden');if(CH.ended)return;addMsg('doc',CH.replies[CH.i++%CH.replies.length])},1500)},500)}
+$('#c-send').onclick=sendMsg;
+$('#c-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg()}});
+$('#c-input').addEventListener('input',e=>{const n=e.target.value.length;$('#c-count').textContent=n+'/1000';$('#c-count').className=n>=900?'font-semibold text-amber-700':'';chatUi()});
+$('#c-drop').onclick=()=>{CH.online=false;chatUi();setTimeout(()=>{CH.online=true;chatUi();toast('Reconnected. Chat is live again.')},2600)};
+$('#c-end').onclick=()=>{CH.ended=true;$('#c-typing').classList.add('hidden');chatUi();toast('Consultation ended. Chat is now read-only.')};
+$('#c-reset').onclick=()=>{CH.ended=false;CH.online=true;$('#c-log').innerHTML='';addMsg('doc','Hello Fahim, how are you feeling today?');chatUi()};
+$('#c-reset').click();
+
+/* ---------- summary + feedback ---------- */
+let rating=0,fbDone=false;
+function renderStars(){$('#stars').innerHTML=[1,2,3,4,5].map(i=>`<button type="button" role="radio" aria-checked="${rating===i}" aria-label="${i} star${i>1?'s':''}" data-r="${i}" class="grid h-11 w-11 place-items-center rounded-xl text-2xl ${i<=rating?'text-amber-500':'text-slate-300'} hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-200" ${fbDone?'disabled':''}>★</button>`).join('')}
+$('#stars').onclick=e=>{const b=e.target.closest('button[data-r]');if(b){rating=+b.dataset.r;$('#fb-err').classList.remove('show');renderStars()}};
+$('#fbForm').onsubmit=e=>{e.preventDefault();if(fbDone)return;if(!rating){$('#fb-err').textContent='Choose a rating from 1 to 5.';$('#fb-err').classList.add('show');return}fbDone=true;renderStars();$('#fb-btn').disabled=true;$('#fb-btn').textContent='Thank you, feedback sent';$('#fb-text').disabled=true;toast('Feedback submitted. It will appear after the manager approves it.')};
+renderStars();$('#printBtn').onclick=()=>window.print();
+
+/* ---------- doctor ---------- */
+const DR={status:'OPEN',rows:[
+ {n:1,name:'Nimal Silva',type:'PHYSICAL',st:'ARRIVED',reason:'Fever and cough'},
+ {n:2,name:'Amali Jayasekara',type:'ONLINE',st:'BOOKED',reason:'Follow-up: blood pressure'},
+ {n:3,name:'Sanduni Fernando',type:'PHYSICAL',st:'BOOKED',reason:'Back pain'},
+ {n:4,name:'Ruwan Wickramasinghe',type:'PHYSICAL',st:'ARRIVED',reason:'Skin rash'},
+ {n:5,name:'Dilini Herath',type:'ONLINE',st:'BOOKED',reason:'Headache for 3 days'},
+ {n:6,name:'Kavindu Rajapaksa',type:'PHYSICAL',st:'BOOKED',reason:'Chest check-up'}]};
+const elig=r=>r.st==='ARRIVED'||(r.st==='BOOKED'&&r.type==='ONLINE');
+function renderDoctor(){
+  const busy=DR.rows.some(r=>r.st==='IN_CONSULTATION'),next=DR.rows.find(elig),run=DR.status==='IN_PROGRESS';
+  $('#d-status').innerHTML=badge(DR.status);
+  $('#d-start').disabled=DR.status!=='OPEN';$('#d-next').disabled=!run||busy||!next;$('#d-end').disabled=!run||busy;
+  const wait=DR.rows.filter(r=>r.st==='BOOKED'&&r.type==='PHYSICAL').map(r=>'No. '+r.n);
+  $('#d-note').textContent=DR.status==='COMPLETED'?'Session ended. Patients were notified.':(wait.length?'Not arrived yet: '+wait.join(', ')+'. Reception must check them in first (BR-08). ':'')+(busy?'Finish the current consultation before calling the next patient.':'');
+  $('#d-body').innerHTML=DR.rows.map(r=>{let act='<span class="text-slate-400">—</span>';
+    if(r.st==='IN_CONSULTATION')act=(r.type==='ONLINE'?`<button class="btn btn-secondary btn-sm" data-a="chat">Open chat room</button>`:'<span class="text-xs text-slate-500">Write notes below</span>');
+    else if(r.st==='BOOKED'||r.st==='ARRIVED')act=`<button class="btn btn-secondary btn-sm" data-a="noshow" data-n="${r.n}" ${run?'':'disabled'}>Mark no-show</button>`;
+    return `<tr><td class="td font-bold">${r.n}</td><td class="td">${esc(r.name)}</td><td class="td">${r.type==='ONLINE'?'<span class="badge b-violet">Online</span>':'<span class="badge b-slate">Physical</span>'}</td><td class="td">${r.type==='ONLINE'?'<span class="text-slate-400">—</span>':(r.st==='BOOKED'?'<span class="text-amber-700">Not arrived</span>':'<span class="text-emerald-700">Arrived</span>')}</td><td class="td">${badge(r.st)}</td><td class="td text-slate-600">${esc(r.reason)}</td><td class="td">${act}</td></tr>`}).join('');
+  ['#d-diag','#d-adv','#d-rx'].forEach(s=>$(s).disabled=!busy);$('#d-save').disabled=!busy}
+$('#d-start').onclick=()=>{DR.status='IN_PROGRESS';renderDoctor();toast('Session started. Patients were notified live.')};
+$('#d-next').onclick=()=>{const r=DR.rows.find(elig);if(!r)return;r.st='IN_CONSULTATION';renderDoctor();toast('Calling No. '+r.n+'. The patient screen updates instantly.')};
+$('#d-end').onclick=()=>confirmDialog({title:'End this session?',body:'Unseen patients stay BOOKED for reception to follow up. Everyone is notified.',ok:'End session'},()=>{DR.status='COMPLETED';renderDoctor()});
+$('#d-body').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;if(b.dataset.a==='chat')return toast('Opens the private chat room for this patient only (BR-09).');
+  const r=DR.rows.find(x=>x.n==b.dataset.n);if(b.dataset.a==='noshow'){r.st='NO_SHOW';renderDoctor()}};
+$('#d-form').onsubmit=e=>{e.preventDefault();const er=$('#d-err');if(!$('#d-diag').value.trim()){er.textContent='Write a short diagnosis summary before completing.';er.classList.add('show');return}er.classList.remove('show');
+  const r=DR.rows.find(x=>x.st==='IN_CONSULTATION');if(r){r.st='COMPLETED'}['#d-diag','#d-adv','#d-rx'].forEach(s=>$(s).value='');renderDoctor();toast('Notes saved (encrypted) and patient marked COMPLETED.')};
+renderDoctor();
+
+/* ---------- reception ---------- */
+let REC=[{n:1,name:'Nimal Silva',type:'PHYSICAL',st:'ARRIVED',pay:'PAID',m:'CASH'},{n:2,name:'Amali Jayasekara',type:'ONLINE',st:'BOOKED',pay:'PAID',m:'CARD'},{n:3,name:'Sanduni Fernando',type:'PHYSICAL',st:'BOOKED',pay:'PENDING',m:'CASH'},{n:4,name:'Ruwan Wickramasinghe',type:'PHYSICAL',st:'ARRIVED',pay:'PENDING',m:'CASH'},{n:5,name:'Dilini Herath',type:'ONLINE',st:'BOOKED',pay:'PENDING',m:'CARD'},{n:6,name:'Kavindu Rajapaksa',type:'PHYSICAL',st:'BOOKED',pay:'PENDING',m:'CASH'}];
+function renderRec(){$('#r-body').innerHTML=REC.map((r,i)=>`<tr><td class="td font-bold">${r.n}</td><td class="td">${esc(r.name)}</td><td class="td">${r.type==='ONLINE'?'<span class="badge b-violet">Online</span>':'<span class="badge b-slate">Physical</span>'}</td><td class="td">${badge(r.st)}</td>
+ <td class="td">${r.type==='PHYSICAL'&&r.st==='BOOKED'?`<button class="btn btn-secondary btn-sm" data-arr="${i}">Mark arrived</button>`:'<span class="text-slate-400">—</span>'}</td>
+ <td class="td"><div class="flex items-center gap-2"><label class="sr-only" for="pay${i}">Payment for ${esc(r.name)}</label><select id="pay${i}" class="input !w-auto !py-1.5 text-xs" data-pay="${i}"><option value="PENDING" ${r.pay==='PENDING'?'selected':''}>PENDING</option><option value="PAID" ${r.pay==='PAID'?'selected':''}>PAID</option></select><label class="sr-only" for="m${i}">Method</label><select id="m${i}" class="input !w-auto !py-1.5 text-xs" data-m="${i}"><option ${r.m==='CASH'?'selected':''}>CASH</option><option ${r.m==='CARD'?'selected':''}>CARD</option></select></div></td>
+ <td class="td"><span class="badge b-slate">🔒 Hidden</span></td></tr>`).join('')}
+$('#r-body').onclick=e=>{const b=e.target.closest('button[data-arr]');if(b){REC[b.dataset.arr].st='ARRIVED';renderRec();toast('Marked ARRIVED. The doctor sees the update live.')}};
+$('#r-body').onchange=e=>{const t=e.target;if(t.dataset.pay!==undefined){REC[t.dataset.pay].pay=t.value;toast('Payment recorded: '+t.value)}if(t.dataset.m!==undefined)REC[t.dataset.m].m=t.value};
+$('#w-btn').onclick=()=>{const n=$('#w-name').value.trim(),p=$('#w-phone').value.trim();let ok=true;
+  const set=(id,m)=>{const e=$(id);e.textContent=m||'';e.classList.toggle('show',!!m);if(m)ok=false};
+  set('#w-e1',n.length<3?'Enter the patient name.':'');set('#w-e2',/^07\d{8}$/.test(p)?'':'Phone must look like 07XXXXXXXX.');
+  $('#w-name').classList.toggle('invalid',n.length<3);$('#w-phone').classList.toggle('invalid',!/^07\d{8}$/.test(p));
+  if(ok&&REC.length>=10){set('#w-e3','This session is full (maximum 10 patients).');ok=false}else $('#w-e3').classList.remove('show');
+  if(!ok)return;const num=REC.length+1;REC.push({n:num,name:n,type:'PHYSICAL',st:'ARRIVED',pay:'PENDING',m:'CASH'});$('#w-name').value='';$('#w-phone').value='';renderRec();toast('Walk-in booked as No. '+num+'.')};
+renderRec();
+
+/* ---------- create session ---------- */
+const EXIST=[{doc:'Dr. A. Perera',date:'2026-11-18',s:'15:00',e:'18:00',room:'Room 3'},{doc:'Dr. N. Silva',date:'2026-11-18',s:'15:00',e:'17:00',room:'Room 2'}];
+const csType=()=>$('#cs-type').value;
+$('#cs-type').onchange=()=>$('#cs-roomwrap').classList.toggle('hidden',csType()==='ONLINE');
+$('#csForm').onsubmit=e=>{e.preventDefault();const errs={};const g=id=>$('#cs-'+id).value;
+  if(toMin(g('end')||'0:0')<=toMin(g('start')||'0:0'))errs.end='End time must be after the start time.';
+  if(csType()==='PHYSICAL'&&!g('room'))errs.room='Physical sessions need a room.';
+  const mx=+g('max');if(!Number.isInteger(mx)||mx<1||mx>60)errs.max='Maximum patients must be 1 to 60.';
+  const pp=+g('per');if(!Number.isInteger(pp)||pp<5||pp>30)errs.per='Minutes per patient must be 5 to 30.';
+  if(!(+g('fee')>0))errs.fee='Enter a fee greater than 0.';
+  let ov='';if(!errs.end)for(const x of EXIST){if(x.date===g('date')&&toMin(g('start'))<toMin(x.e)&&toMin(x.s)<toMin(g('end'))){if(x.doc===g('doc'))ov=x.doc+' already has a session from '+fmt(toMin(x.s))+' to '+fmt(toMin(x.e))+' (BR-02).';else if(csType()==='PHYSICAL'&&x.room===g('room'))ov=x.room+' is already used from '+fmt(toMin(x.s))+' to '+fmt(toMin(x.e))+' (BR-02).'}}
+  errs.overlap=ov;
+  ['end','room','max','per','fee','overlap'].forEach(k=>{const el=$('#cs-e-'+k);el.textContent=errs[k]||'';el.classList.toggle('show',!!errs[k]);const inp=$('#cs-'+k);if(inp&&k!=='overlap')inp.classList.toggle('invalid',!!errs[k])});
+  if(Object.values(errs).some(Boolean))return;
+  EXIST.push({doc:g('doc'),date:g('date'),s:g('start'),e:g('end'),room:g('room')});toast('Session created with status SCHEDULED.')};
+
+/* ---------- delay / cancel ---------- */
+const DL={start:'15:00',per:5};
+function renderDelay(){const d=+$('#dl-min').value;$('#dl-out').textContent=d+' min';[1,7,10].forEach(n=>$('#dl-'+n).textContent=fmt(toMin(DL.start)+(n-1)*DL.per+d))}
+$('#dl-min').oninput=renderDelay;
+$('#dl-apply').onclick=()=>toast('Delay applied. '+REC.filter(r=>r.st!=='CANCELLED').length+' patients notified live with new times.');
+$('#dl-cancel').onclick=()=>confirmDialog({title:'Cancel this session?',body:'Every appointment in the session will be cancelled and all patients are notified live. Records are kept.',ok:'Cancel session'},()=>{const n=REC.length;REC.forEach(r=>r.st='CANCELLED');renderRec();toast('Session cancelled. '+n+' patients notified.')});
+renderDelay();
+
+/* ---------- dashboard ---------- */
+const DAYS=[['Mon',38],['Tue',44],['Wed',52],['Thu',47],['Fri',61],['Sat',29],['Sun',12]],MX=Math.max(...DAYS.map(d=>d[1]));
+$('#bars').innerHTML=DAYS.map(d=>`<div class="flex h-full flex-1 flex-col items-center justify-end gap-1"><span class="text-[10px] font-semibold text-slate-600">${d[1]}</span><div class="w-full rounded-t-md bg-brand-600" style="height:${Math.round(d[1]/MX*100)}%"></div><span class="text-[10px] text-slate-500">${d[0]}</span></div>`).join('');
+$('#todaySess').innerHTML=[['Dr. A. Perera','3:00–6:00 PM','Room 3','IN_PROGRESS'],['Dr. N. Silva','9:00 AM–12:00 PM','Online','COMPLETED'],['Dr. R. Fernando','4:00–6:00 PM','Room 1','OPEN'],['Dr. S. Jayawardena','6:00–8:00 PM','Room 2','CANCELLED']].map(s=>`<li class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200"><span><b>${s[0]}</b><br><span class="text-xs text-slate-500">${s[1]} · ${s[2]}</span></span>${badge(s[3])}</li>`).join('');
+$('#topDocs').innerHTML=[['Dr. A. Perera',4.8,128],['Dr. N. Silva',4.7,96],['Dr. R. Fernando',4.5,74]].map((d,i)=>`<li class="flex items-center justify-between"><span>${i+1}. ${d[0]}</span><span class="text-xs text-slate-600">★ ${d[1]} · ${d[2]} visits</span></li>`).join('');
+const FB=[{c:'Great service, very clear explanation!',r:5,s:'PENDING'},{c:'Waited a little long but the doctor was kind.',r:4,s:'PENDING'},{c:'Not helpful at all.',r:2,s:'PENDING'}];
+function renderFb(){$('#fbMod').innerHTML=FB.length?FB.map((f,i)=>`<li class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200"><p class="text-xs text-amber-600">${'★'.repeat(f.r)}<span class="text-slate-300">${'★'.repeat(5-f.r)}</span> <span class="ml-1 badge ${f.s==='APPROVED'?'b-green':f.s==='HIDDEN'?'b-slate':'b-amber'}">${f.s}</span></p><p class="mt-1 text-slate-700">${esc(f.c)}</p><div class="mt-2 flex gap-1.5"><button class="btn btn-secondary btn-sm" data-f="A" data-i="${i}">Approve</button><button class="btn btn-secondary btn-sm" data-f="H" data-i="${i}">Hide</button><button class="btn btn-secondary btn-sm text-rose-700" data-f="D" data-i="${i}">Delete</button></div></li>`).join(''):'<li class="text-sm text-slate-500">No feedback to moderate.</li>'}
+$('#fbMod').onclick=e=>{const b=e.target.closest('button[data-f]');if(!b)return;const i=+b.dataset.i,a=b.dataset.f;if(a==='D')FB.splice(i,1);else FB[i].s=a==='A'?'APPROVED':'HIDDEN';renderFb()};renderFb();
+const NT=['Pharmacy is open until 8 PM on weekdays.'];
+function renderNt(){$('#ntList').innerHTML=NT.map(n=>`<li>📌 ${esc(n)}</li>`).join('')}
+$('#nt-btn').onclick=()=>{const v=$('#nt-in').value.trim(),er=$('#nt-err');if(v.length<5){er.textContent='Write at least 5 characters.';er.classList.add('show');return}er.classList.remove('show');NT.unshift(v);$('#nt-in').value='';renderNt();toast('Notice published to the public page.')};renderNt();
+
+/* ---------- admin ---------- */
+const USERS=[{n:'Ishara Wijesinghe',role:'ADMIN',on:true,self:true},{n:'Dr. A. Perera',role:'DOCTOR',on:true},{n:'Dr. N. Silva',role:'DOCTOR',on:true},{n:'Chamari Gunawardena',role:'MANAGER',on:true}];
+const AUD=[['09:02','Chamari Gunawardena','LOGIN','203.0.113.14'],['09:15','Dr. A. Perera','CONSULTATION_OPENED (record #1042)','203.0.113.22'],['10:40','Chamari Gunawardena','SESSION_CANCELLED (session #77)','203.0.113.14'],['11:05','Ishara Wijesinghe','ACCOUNT_CREATED (DOCTOR)','203.0.113.9']];
+function addAudit(user,action){AUD.unshift([nowCol(),user,action,'203.0.113.'+(1+Math.floor(Math.random()*250))]);renderAudit()}
+function renderAudit(){$('#audit').innerHTML=AUD.map(a=>`<tr><td class="td whitespace-nowrap text-xs text-slate-500">${a[0]}</td><td class="td">${esc(a[1])}</td><td class="td"><code class="text-xs">${esc(a[2])}</code></td><td class="td text-xs text-slate-500">${a[3]}</td></tr>`).join('')}
+const tmp=()=>'Tmp-'+Math.random().toString(36).slice(2,10)+'#9';
+function renderUsers(){const q=$('#a-search').value.trim().toLowerCase();
+  $('#a-body').innerHTML=USERS.map((u,i)=>({u,i})).filter(x=>!q||(x.u.n+' '+x.u.role).toLowerCase().includes(q)).map(({u,i})=>`<tr><td class="td"><b>${esc(u.n)}</b>${u.self?' <span class="text-xs text-slate-500">(you)</span>':''}${u.must?'<br><span class="text-[11px] text-amber-700">Must change password on first login</span>':''}</td><td class="td"><span class="badge ${u.role==='ADMIN'?'b-rose':u.role==='DOCTOR'?'b-violet':'b-amber'}">${u.role}</span></td><td class="td">${u.on?'<span class="badge b-green">Active</span>':'<span class="badge b-slate">Inactive</span>'}</td>
+  <td class="td"><div class="flex flex-wrap gap-1.5"><button class="btn btn-secondary btn-sm" data-t="${i}" ${u.self?'disabled title="You cannot deactivate your own account"':''}>${u.on?'Deactivate':'Activate'}</button>${u.role!=='ADMIN'?`<button class="btn btn-secondary btn-sm" data-p="${i}">Reset password</button>`:''}</div></td></tr>`).join('')||'<tr><td class="td text-slate-500" colspan="4">No users match your search.</td></tr>'}
+$('#a-search').oninput=renderUsers;
+$('#a-body').onclick=e=>{const t=e.target.closest('button[data-t]'),p=e.target.closest('button[data-p]');
+  if(t){const u=USERS[t.dataset.t];if(u.self)return;u.on=!u.on;renderUsers();addAudit('Ishara Wijesinghe',(u.on?'ACCOUNT_ACTIVATED':'ACCOUNT_DEACTIVATED')+' ('+u.role+')')}
+  if(p){const u=USERS[p.dataset.p],pw=tmp();u.must=true;renderUsers();addAudit('Ishara Wijesinghe','PASSWORD_RESET ('+u.role+')');toast('Temporary password: '+pw+' (shown once)')}};
+$('#a-form').onsubmit=e=>{e.preventDefault();const n=$('#a-name').value.trim(),er=$('#a-err');if(n.length<3){er.textContent='Enter the staff member\'s full name.';er.classList.add('show');$('#a-name').classList.add('invalid');return}er.classList.remove('show');$('#a-name').classList.remove('invalid');
+  const role=$('#a-role').value,pw=tmp();USERS.push({n,role,on:true,must:true});$('#a-name').value='';renderUsers();addAudit('Ishara Wijesinghe','ACCOUNT_CREATED ('+role+')');toast('Account created. Temporary password: '+pw+' (shown once)')};
+renderUsers();renderAudit();
+</script>
+</body>
+</html>
