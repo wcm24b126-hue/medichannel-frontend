@@ -27,6 +27,7 @@ export default function DoctorSearch() {
     <div>
       <input
         className="field mb-6"
+        aria-label="Search doctor or specialisation"
         placeholder="Search doctor or specialisation..."
         value={search}
         onChange={(event) => setSearch(event.target.value)}

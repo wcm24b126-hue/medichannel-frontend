@@ -26,12 +26,24 @@ export async function apiRequest<T>(
       throw new Error(`Request failed: ${response.status}`);
     }
 
+    let message = text;
+
     try {
-      const parsed = JSON.parse(text) as { message?: string };
-      throw new Error(parsed.message || text);
+      const parsed: unknown = JSON.parse(text);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "message" in parsed &&
+        typeof parsed.message === "string" &&
+        parsed.message
+      ) {
+        message = parsed.message;
+      }
     } catch {
-      throw new Error(text);
+      // Keep the response text when the backend does not return JSON.
     }
+
+    throw new Error(message);
   }
 
   if (response.status === 204) {

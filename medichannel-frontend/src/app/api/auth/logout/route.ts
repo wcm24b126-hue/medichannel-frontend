@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   const rejection = rejectCrossOriginMutation(request);
   if (rejection) return rejection;
 
-  const response = NextResponse.json({ message: "Logged out." });
+  const response = NextResponse.redirect(new URL("/login", request.url), 303);
 
   response.cookies.set("medichannel_token", "", {
     httpOnly: true,
