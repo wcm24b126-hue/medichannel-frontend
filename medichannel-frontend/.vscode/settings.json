@@ -1,6 +1,0 @@
-{
-    "nightrider.telemetryNotice": false,
-    "chat.tools.terminal.autoApprove": {
-        "npx tsc": true
-    }
-}

@@ -62,16 +62,16 @@ Deploy in this order: Neon database, Render backend, then Netlify frontend.
    - `DB_URL` to a JDBC URL such as `jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require`
    - `DB_USERNAME` and `DB_PASSWORD` to the Neon role credentials
    Render sets `SPRING_PROFILES_ACTIVE=production`. Wait for the service build and deployment to finish, then copy its `https://...onrender.com` origin.
-3. **Netlify:** Import the same repository. The root `netlify.toml` selects `medichannel-frontend/` and its build command. Set `API_URL` to the Render origin (no trailing slash or `/api`) with the **Functions** scope, then deploy or trigger a new deploy.
+3. **Netlify:** Import the repository root and use the root `netlify.toml`. Set the server-side `API_URL` to the Render backend origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://your-service.onrender.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Then deploy or trigger a new deploy.
 4. **Verify:** Check the Render service status and deployment logs. Then open the Netlify site and verify its backend-backed API requests.
 
 Keep all provider credentials in Render/Netlify environment settings; never commit them or place them in `NEXT_PUBLIC_*` variables. For local backend development, set `SPRING_PROFILES_ACTIVE=production`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in the process environment to connect to Neon. Do not commit local `.env` files.
 
-**Backend implementation status:** The current Spring Boot project is only a starter: it has no API controllers or Flyway migration scripts yet. Deployment can start the service and connect it to Neon, but frontend login, registration, and data flows will not work until those endpoints and schema migrations are implemented.
+**Backend implementation status:** The Spring Boot backend currently provides versioned REST APIs for authentication, patients, doctors, sessions, appointments, and additional modules. Confirm that the backend deployment has applied the matching Flyway migrations before testing frontend flows. Features without a corresponding backend endpoint must not be simulated by the frontend.
 
 ## Environment Variables
 
-The production backend reads `PORT`, `SPRING_PROFILES_ACTIVE`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. `PORT` is supplied by Render. The production profile requires a JDBC-formatted `DB_URL`; Neon connection details should use SSL (`sslmode=require`).
+The frontend server reads `API_URL`, which must be the Render backend origin without `/api` or `/api/v1`. The production backend reads `PORT`, `SPRING_PROFILES_ACTIVE`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. `PORT` is supplied by Render. The production profile requires a JDBC-formatted `DB_URL`; Neon connection details should use SSL (`sslmode=require`).
 
 ## Team Development
 
