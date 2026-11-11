@@ -83,8 +83,8 @@ async function main() {
     );
     assert(!text.includes("<iframe"), "no iframes in the static app");
     assert(
-      (text.match(/href="#welcome"/g) || []).length >= 4,
-      "login/register logos link to the home screen"
+      (text.match(/href="#welcome"/g) || []).length >= 12,
+      "every logo and app-name link returns to the welcome screen"
     );
   }
 

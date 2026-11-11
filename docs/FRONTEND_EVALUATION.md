@@ -1,5 +1,11 @@
 # MediChannel Frontend Evaluation
 
+> **Scope note:** this document scores the frontend on a UX/security/
+> craftsmanship rubric (73/100). It is **not** the official Assignment 2
+> marking scheme. For the mark against the IT404050 brief (64/100), see
+> [`ASSIGNMENT_2_REVIEW.md`](./ASSIGNMENT_2_REVIEW.md). For the dedicated
+> security review (82/100), see [`WEB_SECURITY_REVIEW.md`](./WEB_SECURITY_REVIEW.md).
+
 **Scope:** static frontend (`public/mediclinic-system.html` + `public/mediclinic-app.js`) and the Next.js same-origin BFF in `src/app/api/`.
 
 **Reviewed:** 12 November 2026 · branch `frontend-html-app`

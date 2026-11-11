@@ -76,6 +76,7 @@ A scheduled GitHub Actions workflow (`.github/workflows/keep-backend-awake.yml`)
 ### Frontend behavior and security
 
 - The welcome screen is public. Signed-in patients also see a live queue card built from their real appointment for today (`You are number N`), a Dashboard button, and Log out; Log in/Register are hidden until logout.
+- Every MediChannel logo and app-name link — dashboard headers, login, registration, and footer — returns to the welcome screen.
 - Doctor, manager, and admin workspaces show only the selected sidebar panel. Panel links update the URL without scrolling the page or jumping to the bottom. Panel deep links (for example `#doctor-q`) are supported.
 - A boot screen covers the app until session restore finishes, so the dashboard never flashes before hydration.
 - Tailwind CSS 3.4.17 is self-hosted under `public/vendor/`, so the Content Security Policy can use `script-src 'self'` without trusting a third-party CDN.
@@ -97,8 +98,12 @@ SMOKE_BASE_URL=http://localhost:8080 npm run test:smoke
 ```
 
 The smoke suite checks routing, self-hosted assets, CSP/security headers, cache policy, anonymous
-session rejection, CSRF rejection, and the wake endpoint. A manual browser test matrix and the
-current score are in [`docs/FRONTEND_EVALUATION.md`](./docs/FRONTEND_EVALUATION.md).
+session rejection, CSRF rejection, and the wake endpoint. The browser test matrix and the
+frontend UX score are in [`docs/FRONTEND_EVALUATION.md`](./docs/FRONTEND_EVALUATION.md).
+The dedicated security assessment is in
+[`docs/WEB_SECURITY_REVIEW.md`](./docs/WEB_SECURITY_REVIEW.md), and the review against the
+official IT404050 Assignment 2 brief is in
+[`docs/ASSIGNMENT_2_REVIEW.md`](./docs/ASSIGNMENT_2_REVIEW.md).
 
 **Backend implementation status:** The Spring Boot backend currently provides versioned REST APIs for authentication, patients, doctors, sessions, appointments, and additional modules. Confirm that the backend deployment has applied the matching Flyway migrations before testing frontend flows. Features without a corresponding backend endpoint must not be simulated by the frontend.
 
