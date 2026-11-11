@@ -18,6 +18,19 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  async redirects() {
+    return [
+      { source: "/login", destination: "/mediclinic-system.html#login", permanent: false },
+      { source: "/register", destination: "/mediclinic-system.html#register", permanent: false },
+      { source: "/appointments", destination: "/mediclinic-system.html#appointments", permanent: false },
+      { source: "/consultation", destination: "/mediclinic-system.html#consult", permanent: false },
+      { source: "/doctors", destination: "/mediclinic-system.html#index", permanent: false },
+      { source: "/profile", destination: "/mediclinic-system.html#appointments", permanent: false },
+      { source: "/doctor/:path*", destination: "/mediclinic-system.html#doctor", permanent: false },
+      { source: "/manager/:path*", destination: "/mediclinic-system.html#manager", permanent: false },
+      { source: "/admin/:path*", destination: "/mediclinic-system.html#admin", permanent: false },
+    ];
+  },
   async headers() {
     const securityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
