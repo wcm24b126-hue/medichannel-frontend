@@ -1,10 +1,10 @@
-# MediChannel – Backend
+# MediChannel – Hospital Channelling and Appointment Management
 
 ## Project Overview
 
 MediChannel is a Hospital Channelling and Appointment Management System developed as a group project for IT404050 – Full Stack Development.
 
-The backend provides REST APIs, authentication, business logic, database operations, and real-time communication.
+The repository contains a Next.js frontend and a Spring Boot backend. The backend provides REST APIs, authentication, business logic, database operations, and real-time communication.
 
 ## Technology Stack
 
@@ -69,7 +69,36 @@ Keep all provider credentials in Render/Netlify environment settings; never comm
 
 ### Render cold starts and frontend caching
 
-The frontend probes the same-origin `/api/backend/wake` route when the app loads and when a hidden tab becomes visible again. The route checks Render's health endpoint so a sleeping service can start; it does not keep Render awake, and a cold start may take time. Authenticated appointment history and queue data are fetched from the backend and are not cached. The app HTML and its browser script may be stored but must be revalidated before reuse.
+The frontend probes the same-origin `/api/backend/wake` route when the app loads, when a hidden tab becomes visible again, after a back-forward-cache restore, and when connectivity returns. The route checks Render's health endpoint so a sleeping service can start; it does not keep Render awake, and a cold start may take time. Authenticated appointment history and queue data are fetched from the backend and are not cached. The app HTML and its browser script may be stored but must be revalidated before reuse.
+
+A scheduled GitHub Actions workflow (`.github/workflows/keep-backend-awake.yml`) pings the Render health endpoint every 10 minutes so the free instance is less likely to reach its ~15-minute idle sleep. GitHub may delay scheduled runs, so treat this as a best-effort keep-alive rather than a guarantee.
+
+### Frontend behavior and security
+
+- The welcome screen is public. Signed-in patients also see a live queue card built from their real appointment for today (`You are number N`), a Dashboard button, and Log out; Log in/Register are hidden until logout.
+- Doctor, manager, and admin workspaces show only the selected sidebar panel. Panel links update the URL without scrolling the page or jumping to the bottom. Panel deep links (for example `#doctor-q`) are supported.
+- A boot screen covers the app until session restore finishes, so the dashboard never flashes before hydration.
+- Tailwind CSS 3.4.17 is self-hosted under `public/vendor/`, so the Content Security Policy can use `script-src 'self'` without trusting a third-party CDN.
+- Auth cookies are HttpOnly, SameSite=Lax, Secure in production, and use the `__Host-` prefix in production. JavaScript cannot read the token.
+- Appointment APIs and auth responses are `no-store`; HTML and the app script revalidate; the versioned vendor file is immutable.
+- The static HTML is served with a strict CSP, `X-Frame-Options: DENY`, COOP/CORP, and `frame-ancestors 'none'`.
+
+### Testing
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+
+# In one terminal (use the port printed by Next.js):
+npm start
+# In another terminal:
+SMOKE_BASE_URL=http://localhost:8080 npm run test:smoke
+```
+
+The smoke suite checks routing, self-hosted assets, CSP/security headers, cache policy, anonymous
+session rejection, CSRF rejection, and the wake endpoint. A manual browser test matrix and the
+current score are in [`docs/FRONTEND_EVALUATION.md`](./docs/FRONTEND_EVALUATION.md).
 
 **Backend implementation status:** The Spring Boot backend currently provides versioned REST APIs for authentication, patients, doctors, sessions, appointments, and additional modules. Confirm that the backend deployment has applied the matching Flyway migrations before testing frontend flows. Features without a corresponding backend endpoint must not be simulated by the frontend.
 

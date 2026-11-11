@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setAuthCookie } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
 
 export async function POST(request: NextRequest) {
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
       }
     );
 
@@ -62,13 +64,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    result.cookies.set("medichannel_token", data.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: data.expiresIn,
-    });
+    setAuthCookie(result, data.accessToken, data.expiresIn);
 
     return result;
   } catch {

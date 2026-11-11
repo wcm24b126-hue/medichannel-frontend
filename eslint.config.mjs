@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Static browser delivery files are not part of the Next.js source tree.
+    "public/**",
   ]),
 ]);
 

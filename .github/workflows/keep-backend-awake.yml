@@ -1,0 +1,34 @@
+name: Keep backend awake
+
+on:
+  schedule:
+    # Render's free plan sleeps after ~15 minutes without traffic. A 10-minute
+    # ping keeps the service warm; GitHub may delay scheduled runs under load.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: keep-backend-awake
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Ping Render health endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Wake the backend
+        run: |
+          for attempt in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 60 \
+              https://medichannel-backend.onrender.com/actuator/health >/dev/null; then
+              echo "Backend is awake."
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed; retrying in 20 seconds."
+            sleep 20
+          done
+          echo "Backend did not respond after three attempts." >&2
+          exit 1

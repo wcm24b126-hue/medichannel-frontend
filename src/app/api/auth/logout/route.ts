@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clearAuthCookie } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
 
 export async function POST(request: NextRequest) {
@@ -7,13 +8,7 @@ export async function POST(request: NextRequest) {
 
   const response = NextResponse.json({ message: "Logged out." });
 
-  response.cookies.set("medichannel_token", "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
+  clearAuthCookie(response);
 
   return response;
 }

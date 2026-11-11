@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setAuthCookie } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
 
 type BackendError = { message?: string };
@@ -21,16 +22,6 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
 function messageFrom(data: Record<string, unknown>, fallback: string) {
   const error = data as BackendError;
   return typeof error.message === "string" ? error.message : fallback;
-}
-
-function setAuthCookie(response: NextResponse, token: string, expiresIn: number) {
-  response.cookies.set("medichannel_token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: expiresIn,
-  });
 }
 
 export async function POST(request: NextRequest) {
@@ -110,6 +101,7 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, confirmPassword }),
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
     const registration = await readJson(registerResponse);
     if (!registerResponse.ok) {
@@ -135,6 +127,7 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
     const login = await readJson(loginResponse);
     if (
@@ -170,6 +163,7 @@ export async function POST(request: NextRequest) {
       headers: { ...authorization, "Content-Type": "application/json" },
       body: JSON.stringify(profile),
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
 
     let profileCreated = profileResponse.ok;
@@ -177,6 +171,7 @@ export async function POST(request: NextRequest) {
       const existingProfile = await fetch(`${apiUrl}/api/v1/patients/me`, {
         headers: authorization,
         cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
       });
       profileCreated = existingProfile.ok;
     }

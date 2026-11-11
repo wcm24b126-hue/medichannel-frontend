@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clearAuthCookie, readAuthToken } from "@/lib/auth-cookie";
 
 type CurrentUser = {
   userId: string;
@@ -9,7 +10,7 @@ type CurrentUser = {
 const roles = new Set(["CUSTOMER", "DOCTOR", "MANAGER", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get("medichannel_token")?.value;
+  const token = readAuthToken(request);
   if (!token) {
     return NextResponse.json({ message: "Authentication required." }, { status: 401 });
   }
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
       {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
       }
     );
     const text = await response.text();
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
         { status: response.status }
       );
       if (response.status === 401) {
-        result.cookies.delete("medichannel_token");
+        clearAuthCookie(result);
       }
       return result;
     }

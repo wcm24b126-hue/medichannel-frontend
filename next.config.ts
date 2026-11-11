@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   async redirects() {
     return [
+      { source: "/", destination: "/mediclinic-system.html", permanent: false },
       { source: "/login", destination: "/mediclinic-system.html#login", permanent: false },
       { source: "/register", destination: "/mediclinic-system.html#register", permanent: false },
       { source: "/appointments", destination: "/mediclinic-system.html#appointments", permanent: false },
@@ -35,40 +36,60 @@ const nextConfig: NextConfig = {
     const securityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+      { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
       {
         key: "Permissions-Policy",
-        value: "camera=(), microphone=(), geolocation=()",
+        value:
+          "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
       },
+      { key: "X-DNS-Prefetch-Control", value: "off" },
+      { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
     ];
 
     if (process.env.NODE_ENV === "production") {
       securityHeaders.push({
         key: "Strict-Transport-Security",
-        value: "max-age=31536000; includeSubDomains",
+        value: "max-age=31536000; includeSubDomains; preload",
       });
     }
 
     const replicaCsp = [
       "default-src 'self'",
-      `script-src 'self' https://cdn.tailwindcss.com ${inlineScriptHashes
+      `script-src 'self' ${inlineScriptHashes
         .map((hash) => `'sha256-${hash}'`)
         .join(" ")}`,
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://images.unsplash.com",
-      "connect-src 'self' wss:",
+      "img-src 'self' data: blob:",
+      "connect-src 'self'",
+      "media-src 'none'",
       "object-src 'none'",
+      "frame-src 'none'",
+      "worker-src 'self' blob:",
+      "manifest-src 'self'",
       "base-uri 'self'",
       "form-action 'self'",
-      "frame-ancestors 'self'",
+      "frame-ancestors 'none'",
     ].join("; ");
 
     return [
       { source: "/:path*", headers: securityHeaders },
       {
         source: "/api/:path*",
-        headers: [{ key: "Cache-Control", value: "no-store" }],
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+        ],
+      },
+      {
+        source: "/vendor/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
       },
       {
         source: "/mediclinic-app.js",

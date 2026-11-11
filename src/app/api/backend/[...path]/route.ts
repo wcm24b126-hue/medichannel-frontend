@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readAuthToken } from "@/lib/auth-cookie";
 import { rejectCrossOriginMutation } from "@/lib/request-security";
 
 type RouteContext = {
@@ -27,10 +28,10 @@ async function forwardRequest(
   const targetUrl = `${apiUrl.replace(/\/$/, "")}/api/v1/${path.join("/")}${request.nextUrl.search}`;
 
   const headers = new Headers();
-  const cookie = request.cookies.get("medichannel_token")?.value;
+  const token = readAuthToken(request);
 
-  if (cookie) {
-    headers.set("Authorization", `Bearer ${cookie}`);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
   const contentType = request.headers.get("content-type");
@@ -48,6 +49,7 @@ async function forwardRequest(
       headers,
       body,
       cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
     });
 
     const responseBody = await backendResponse.text();
