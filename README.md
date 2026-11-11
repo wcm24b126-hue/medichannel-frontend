@@ -67,6 +67,10 @@ Deploy in this order: Neon database, Render backend, then Netlify frontend.
 
 Keep all provider credentials in Render/Netlify environment settings; never commit them or place them in `NEXT_PUBLIC_*` variables. For local backend development, set `SPRING_PROFILES_ACTIVE=production`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in the process environment to connect to Neon. Do not commit local `.env` files.
 
+### Render cold starts and frontend caching
+
+The frontend probes the same-origin `/api/backend/wake` route when the app loads and when a hidden tab becomes visible again. The route checks Render's health endpoint so a sleeping service can start; it does not keep Render awake, and a cold start may take time. Authenticated appointment history and queue data are fetched from the backend and are not cached. The app HTML and its browser script may be stored but must be revalidated before reuse.
+
 **Backend implementation status:** The Spring Boot backend currently provides versioned REST APIs for authentication, patients, doctors, sessions, appointments, and additional modules. Confirm that the backend deployment has applied the matching Flyway migrations before testing frontend flows. Features without a corresponding backend endpoint must not be simulated by the frontend.
 
 ## Environment Variables
