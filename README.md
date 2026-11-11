@@ -22,6 +22,8 @@ The backend provides REST APIs, authentication, business logic, database operati
 - Database hosting: Neon PostgreSQL
 - Frontend hosting: Netlify
 
+The Next.js frontend is in [`medichannel-frontend/`](./medichannel-frontend/), and the Spring Boot service is in [`medichannel/`](./medichannel/). The repository-root [`netlify.toml`](./netlify.toml) configures Netlify to build the frontend. [`render.yaml`](./render.yaml) and [`medichannel/Dockerfile`](./medichannel/Dockerfile) configure the backend service for Render.
+
 ## User Roles
 
 - CUSTOMER
@@ -51,23 +53,25 @@ Database schema changes will be managed through Flyway migration files.
 
 Never commit database passwords, connection strings, encryption keys, JWT secrets, or other credentials.
 
-## Getting Started
+## Deployment
 
-Backend setup instructions will be added after the Spring Boot project is initialized.
+Deploy in this order: Neon database, Render backend, then Netlify frontend.
+
+1. **Neon:** Create a PostgreSQL project and database. Copy its connection details. Use the pooled hostname if the Neon dashboard offers one, and require SSL.
+2. **Render:** Connect this repository and create a Blueprint from the root `render.yaml`. The service builds the Dockerfile in `medichannel/`. In the Render service's environment, set:
+   - `DB_URL` to a JDBC URL such as `jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require`
+   - `DB_USERNAME` and `DB_PASSWORD` to the Neon role credentials
+   Render sets `SPRING_PROFILES_ACTIVE=production`. Wait for the service build and deployment to finish, then copy its `https://...onrender.com` origin.
+3. **Netlify:** Import the repository root and use the root `netlify.toml`. Set the server-side `API_URL` to the Render backend origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://your-service.onrender.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Then deploy or trigger a new deploy.
+4. **Verify:** Check the Render service status and deployment logs. Then open the Netlify site and verify its backend-backed API requests.
+
+Keep all provider credentials in Render/Netlify environment settings; never commit them or place them in `NEXT_PUBLIC_*` variables. For local backend development, set `SPRING_PROFILES_ACTIVE=production`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in the process environment to connect to Neon. Do not commit local `.env` files.
+
+**Backend implementation status:** The Spring Boot backend currently provides versioned REST APIs for authentication, patients, doctors, sessions, appointments, and additional modules. Confirm that the backend deployment has applied the matching Flyway migrations before testing frontend flows. Features without a corresponding backend endpoint must not be simulated by the frontend.
 
 ## Environment Variables
 
-Create a local `.env` file for development.
-
-Example:
-
-    DB_URL=jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require
-    DB_USERNAME=YOUR_DATABASE_USERNAME
-    DB_PASSWORD=YOUR_DATABASE_PASSWORD
-
-These are example placeholders only. Use your own development credentials.
-
-Do not commit `.env` or any file containing real credentials.
+The frontend server reads `API_URL`, which must be the Render backend origin without `/api` or `/api/v1`. The production backend reads `PORT`, `SPRING_PROFILES_ACTIVE`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. `PORT` is supplied by Render. The production profile requires a JDBC-formatted `DB_URL`; Neon connection details should use SSL (`sslmode=require`).
 
 ## Team Development
 
