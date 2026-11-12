@@ -2922,7 +2922,10 @@
 
     try {
       const record = await MC.summary(appointmentId);
-      if (!record) return;
+      if (!record) {
+        updateDoctorConsultSummaryBox(null);
+        return;
+      }
 
       state.consult.summary = record;
 
@@ -2949,11 +2952,123 @@
           formatDateTime(record.updatedAt || record.createdAt) +
           (record.doctorName ? " by " + doctorName({ doctorName: record.doctorName }) : "");
       }
+      updateDoctorConsultSummaryBox(record);
     } catch (error) {
+      updateDoctorConsultSummaryBox(null);
       if (error.status !== 404 && empty) {
         empty.hidden = false;
         empty.textContent = error.message;
       }
+    }
+  }
+
+  function updateDoctorConsultSummaryBox(record) {
+    const docBox = document.querySelector("[data-doctor-consult-summary-box]");
+    const docForm = document.querySelector("[data-consult-summary-form]");
+    const toggleBtn = document.querySelector("[data-consult-summary-toggle]");
+    const submitBtn = document.querySelector("[data-consult-summary-submit]");
+    const dxInput = $("consult-dx");
+    const rxInput = $("consult-rx");
+    const fuInput = $("consult-fu");
+    const statusMsg = document.querySelector("[data-consult-summary-status]");
+
+    if (!docBox) return;
+
+    const isDoctor = S && S.role === "DOCTOR";
+    docBox.hidden = !isDoctor;
+    if (statusMsg) statusMsg.textContent = "";
+
+    if (isDoctor) {
+      if (record) {
+        if (dxInput) dxInput.value = record.diagnosis || "";
+        if (rxInput) rxInput.value = record.prescription || record.treatmentNotes || "";
+        if (fuInput) fuInput.value = record.followUpInstructions || "";
+        if (toggleBtn) toggleBtn.textContent = "✏️ Edit summary";
+        if (submitBtn) submitBtn.textContent = "Update & publish to patient";
+        if (docForm) docForm.hidden = true;
+      } else {
+        if (dxInput) dxInput.value = "";
+        if (rxInput) rxInput.value = "";
+        if (fuInput) fuInput.value = "";
+        if (toggleBtn) toggleBtn.textContent = "✍️ Write summary";
+        if (submitBtn) submitBtn.textContent = "Save & publish to patient";
+        if (docForm) docForm.hidden = false;
+      }
+    }
+  }
+
+  async function submitConsultSummary(event) {
+    if (event) event.preventDefault();
+    const appointment = state.consult.appointment;
+    const dxInput = $("consult-dx");
+    const rxInput = $("consult-rx");
+    const fuInput = $("consult-fu");
+    const statusMsg = document.querySelector("[data-consult-summary-status]");
+    const submitBtn = document.querySelector("[data-consult-summary-submit]");
+
+    if (!appointment) return;
+
+    const diagnosis = dxInput ? dxInput.value.trim() : "";
+    if (!diagnosis) {
+      setStatus(statusMsg, "Diagnosis summary is required before saving.", true);
+      if (dxInput) dxInput.focus();
+      return;
+    }
+
+    const prescription = rxInput ? rxInput.value.trim() : null;
+    const followUpInstructions = fuInput ? fuInput.value.trim() : null;
+
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      if (appointment.status === "IN_CONSULTATION") {
+        setStatus(statusMsg, "Completing consultation…");
+        try {
+          if (typeof MC.completeConsultation === "function") {
+            await MC.completeConsultation(appointment.appointmentId);
+          } else {
+            await MC.completeAndAdvance(appointment.appointmentId);
+          }
+          appointment.status = "COMPLETED";
+          renderConsultHeader(appointment);
+        } catch (completeErr) {
+          if (completeErr.status !== 409) {
+            throw completeErr;
+          }
+          appointment.status = "COMPLETED";
+        }
+      }
+
+      setStatus(statusMsg, "Publishing summary to patient…");
+      const summary = await MC.saveSummary(
+        appointment.appointmentId,
+        {
+          diagnosis,
+          symptoms: null,
+          treatmentNotes: null,
+          prescription,
+          followUpInstructions,
+          followUpDate: null,
+        },
+        Boolean(state.consult.summary)
+      );
+
+      state.consult.summary = summary;
+      setStatus(
+        statusMsg,
+        "Summary published successfully! The patient can now view it."
+      );
+
+      await loadConsultSummary(appointment.appointmentId);
+      if (submitBtn) submitBtn.textContent = "Update & publish to patient";
+
+      if (state.doctor.sessionId) {
+        void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+      }
+    } catch (error) {
+      setStatus(statusMsg, error.message || "Could not publish summary.", true);
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   }
 
@@ -3489,6 +3604,18 @@
       printSummary();
       return;
     }
+
+    if (event.target.closest("[data-consult-summary-toggle]")) {
+      const form = document.querySelector("[data-consult-summary-form]");
+      if (form) form.hidden = !form.hidden;
+      return;
+    }
+
+    if (event.target.closest("[data-consult-summary-cancel]")) {
+      const form = document.querySelector("[data-consult-summary-form]");
+      if (form) form.hidden = true;
+      return;
+    }
   });
 
   document.addEventListener("change", (event) => {
@@ -3541,6 +3668,14 @@
     feedbackForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitFeedback();
+    });
+  }
+
+  const consultSummaryForm = document.querySelector("[data-consult-summary-form]");
+  if (consultSummaryForm) {
+    consultSummaryForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void submitConsultSummary(event);
     });
   }
 
