@@ -70,7 +70,8 @@ export async function POST(request: NextRequest) {
       (input.phone !== undefined && typeof input.phone !== "string") ||
       (input.dateOfBirth !== undefined &&
         typeof input.dateOfBirth !== "string") ||
-      (input.gender !== undefined && typeof input.gender !== "string")
+      (input.gender !== undefined && typeof input.gender !== "string") ||
+      (input.address !== undefined && typeof input.address !== "string")
     ) {
       return NextResponse.json(
         { message: "Patient profile fields must be provided as text." },
@@ -156,6 +157,7 @@ export async function POST(request: NextRequest) {
       nic: nic || undefined,
       dateOfBirth: input.dateOfBirth,
       gender: input.gender,
+      address: typeof input.address === "string" ? input.address.trim() : undefined,
     };
     const authorization = { Authorization: `Bearer ${login.accessToken}` };
     const profileResponse = await fetch(`${apiUrl}/api/v1/patients/me`, {
@@ -197,9 +199,8 @@ export async function POST(request: NextRequest) {
       {
         user: { id: login.userId, email: login.email, role: login.role },
         profileCreated: true,
-        addressSaved: false,
-        message:
-          "Account and patient profile created. Address is not stored by the current backend.",
+        addressSaved: true,
+        message: "Account and patient profile created successfully.",
       },
       { status: 201 }
     );
