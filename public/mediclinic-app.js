@@ -36,7 +36,7 @@
   };
 
   const HOME = {
-    CUSTOMER: "appointments",
+    CUSTOMER: "index",
     DOCTOR: "doctor",
     MANAGER: "manager",
     ADMIN: "admin",
@@ -612,7 +612,8 @@
     });
 
     document.querySelectorAll("[data-home-dashboard]").forEach((link) => {
-      const home = S ? HOME[S.role] : null;
+      const isStaff = S && ["DOCTOR", "MANAGER", "ADMIN"].includes(S.role);
+      const home = isStaff ? HOME[S.role] : null;
       link.hidden = !home;
       if (home) link.href = "#" + home;
     });
@@ -3195,9 +3196,7 @@
       form.reset();
       render();
 
-      const intent = readIntent();
-
-      if (intent && S.role === "CUSTOMER") {
+      if (S.role === "CUSTOMER") {
         setAppMessage("");
         nav("index");
       } else {
