@@ -413,6 +413,10 @@
     } catch {
       // Ignore history failures (for example in private modes).
     }
+
+    if (link.hash === "#doctor-n") {
+      void loadDoctorNotesPicker();
+    }
   }
 
   function initPanels(view, requestedPanel) {
@@ -450,6 +454,10 @@
         link.removeAttribute("aria-current");
       }
     });
+
+    if (active.id === "doctor-n") {
+      void loadDoctorNotesPicker();
+    }
   }
 
   function showView(id, panel, options) {
@@ -591,7 +599,8 @@
     });
 
     document.querySelectorAll("[data-roles]").forEach((link) => {
-      const roles = String(link.dataset.roles || "*").split(/\s+/);
+      const raw = link.getAttribute("data-roles") || link.dataset.roles || "*";
+      const roles = String(raw).split(/\s+/);
       link.hidden = !(
         roles.includes("*") ||
         (S && roles.includes(S.role))
@@ -1803,6 +1812,7 @@
 
       const sessionId = select ? select.value : sessions[0].sessionId;
       await loadDoctorQueue(sessionId);
+      void loadDoctorNotesPicker();
     } catch (error) {
       if (error.status === 401) {
         handleSessionExpired();
@@ -2006,8 +2016,14 @@
         if (appointment.paymentStatus === "PAID") {
           actions.append(
             doctorAction(
-              "Mark arrived",
+              "Start",
               "bg-brand border-brand text-white hover:bg-brand-d",
+              "start",
+              appointment.appointmentId
+            ),
+            doctorAction(
+              "Mark arrived",
+              "bg-white border-line text-slate2 hover:bg-snow",
               "arrive",
               appointment.appointmentId
             )
@@ -2109,6 +2125,9 @@
       } else if (name === "start") {
         await MC.startConsultation(appointmentId);
         setStatus(statusNode, "Consultation started.");
+        state.consult.requestedId = appointmentId;
+        nav("consult");
+        return;
       } else if (name === "complete") {
         const result = await MC.completeAndAdvance(appointmentId);
 
@@ -2159,6 +2178,66 @@
     }
   }
 
+  async function loadDoctorNotesPicker(preselectedId) {
+    if (!S || S.role !== "DOCTOR") return;
+    const pick = $("doctor-notes-pick");
+    if (!pick) return;
+
+    try {
+      const appointments = await MC.doctorAppointments({});
+      const list = Array.isArray(appointments) ? appointments : [];
+      state.doctor.allAppointments = list;
+
+      pick.replaceChildren();
+
+      if (!list.length) {
+        const opt = el("option", "", "No consultations available yet");
+        opt.value = "";
+        pick.append(opt);
+        const title = document.querySelector("[data-notes-title]");
+        const reason = document.querySelector("[data-notes-reason]");
+        if (title) title.textContent = "Consultation notes";
+        if (reason) reason.textContent = "You do not have any patient consultations yet.";
+        return;
+      }
+
+      list.forEach((appt) => {
+        const ref = referenceOf(appt.bookingReference || appt.appointmentId);
+        const name = appt.patientName || "Patient";
+        const statusLabel = APPT_STATUS[appt.status]
+          ? APPT_STATUS[appt.status][0]
+          : titleCase(appt.status);
+        const dateStr = appt.sessionDate ? formatDate(appt.sessionDate) : "";
+        const label = [ref, name, dateStr, statusLabel].filter(Boolean).join(" · ");
+        const opt = el("option", "", label);
+        opt.value = appt.appointmentId;
+        pick.append(opt);
+      });
+
+      let targetId = preselectedId;
+      if (!targetId && state.doctor.selected) {
+        targetId = state.doctor.selected.appointmentId;
+      }
+      if (!targetId) {
+        const inConsult = list.find((a) => a.status === "IN_CONSULTATION");
+        if (inConsult) {
+          targetId = inConsult.appointmentId;
+        } else {
+          const completed = list.find((a) => a.status === "COMPLETED");
+          targetId = completed ? completed.appointmentId : list[0].appointmentId;
+        }
+      }
+
+      pick.value = targetId || "";
+      const selected = list.find((a) => a.appointmentId === pick.value);
+      if (selected) {
+        await selectNotes(selected);
+      }
+    } catch (err) {
+      console.warn("Could not load doctor notes picker:", err);
+    }
+  }
+
   async function selectNotes(appointment) {
     if (!appointment) return;
 
@@ -2172,9 +2251,11 @@
     const rx = $("doctor-rx");
     const fu = $("doctor-fu");
     const save = document.querySelector("[data-save-summary]");
+    const chatLink = document.querySelector("[data-doctor-chat-link]");
+    const chatBtn = document.querySelector("[data-doctor-to-chat]");
+    const pick = $("doctor-notes-pick");
 
-    const name =
-      appointment.patientName || "Patient";
+    const name = appointment.patientName || "Patient";
     const number = appointment.appointmentNumber
       ? "#" + appointment.appointmentNumber + " · "
       : "";
@@ -2187,28 +2268,55 @@
           ? APPT_STATUS[appointment.status][0]
           : titleCase(appointment.status)) +
         " · Payment: " +
-        (appointment.paymentStatus === "PAID" ? "Paid" : "Not paid");
+        (appointment.paymentStatus === "PAID" ? "Paid" : "Not paid") +
+        (appointment.bookingReference
+          ? " · Ref " + referenceOf(appointment.bookingReference)
+          : "");
+    }
+
+    if (pick && pick.value !== appointment.appointmentId) {
+      pick.value = appointment.appointmentId;
     }
 
     if (dx) dx.value = "";
     if (rx) rx.value = "";
     if (fu) fu.value = "";
 
+    const inConsult = appointment.status === "IN_CONSULTATION";
     const completed = appointment.status === "COMPLETED";
 
     if (save) {
-      save.disabled = !completed;
-      save.textContent = completed ? "Save notes" : "Complete the consultation first";
+      save.disabled = !(completed || inConsult);
+      save.textContent = inConsult
+        ? "Complete consultation & save notes"
+        : "Save notes";
+    }
+
+    const isOnline = appointment.consultationType === "ONLINE";
+    if (chatLink) {
+      chatLink.hidden = !isOnline;
+      chatLink.onclick = (e) => {
+        e.preventDefault();
+        state.consult.requestedId = appointment.appointmentId;
+        nav("consult");
+      };
+    }
+    if (chatBtn) {
+      chatBtn.hidden = !isOnline;
+      chatBtn.onclick = () => {
+        state.consult.requestedId = appointment.appointmentId;
+        nav("consult");
+      };
     }
 
     setStatus(
       status,
       completed
-        ? "Add the diagnosis and prescription, then save."
-        : "The summary can be saved after you complete the consultation."
+        ? "Add or update diagnosis and prescription, then save."
+        : inConsult
+        ? "Consultation in progress. Saving will complete the consultation and publish notes to the patient."
+        : "Consultation must be started or completed before saving notes."
     );
-
-    if (!completed) return;
 
     try {
       const summary = await MC.summary(appointment.appointmentId);
@@ -2220,6 +2328,7 @@
       if (rx) rx.value = summary.prescription || summary.treatmentNotes || "";
       if (fu) fu.value = summary.followUpInstructions || "";
 
+      if (save) save.textContent = "Update notes";
       setStatus(status, "Summary loaded. Saving updates the existing record.");
     } catch (error) {
       if (error.status !== 404) setStatus(status, error.message, true);
@@ -2227,34 +2336,55 @@
   }
 
   async function saveDoctorSummary() {
-    const appointment = state.doctor.selected;
+    let appointment = state.doctor.selected;
+    const pick = $("doctor-notes-pick");
+    if ((!appointment || appointment.appointmentId !== (pick && pick.value)) && pick && pick.value) {
+      appointment = (state.doctor.allAppointments || []).find(
+        (a) => a.appointmentId === pick.value
+      ) || (state.doctor.queue && state.doctor.queue.appointments || []).find(
+        (a) => a.appointmentId === pick.value
+      );
+    }
+
     const status = document.querySelector("[data-notes-status]");
     const save = document.querySelector("[data-save-summary]");
     const dx = $("doctor-dx");
     const rx = $("doctor-rx");
     const fu = $("doctor-fu");
 
-    if (!appointment) return;
-
-    if (appointment.status !== "COMPLETED") {
-      setStatus(
-        status,
-        "Complete the consultation before saving the summary.",
-        true
-      );
+    if (!appointment) {
+      setStatus(status, "Please select a patient / consultation first.", true);
       return;
     }
 
     const diagnosis = dx ? dx.value.trim() : "";
-
     if (!diagnosis) {
-      setStatus(status, "Diagnosis is required before saving.", true);
+      setStatus(status, "Diagnosis summary is required before saving.", true);
+      if (dx) dx.focus();
       return;
     }
 
     if (save) save.disabled = true;
 
     try {
+      if (appointment.status === "IN_CONSULTATION") {
+        setStatus(status, "Completing consultation…");
+        try {
+          if (typeof MC.completeConsultation === "function") {
+            await MC.completeConsultation(appointment.appointmentId);
+          } else {
+            await MC.completeAndAdvance(appointment.appointmentId);
+          }
+          appointment.status = "COMPLETED";
+        } catch (completeErr) {
+          if (completeErr.status !== 409) {
+            throw completeErr;
+          }
+          appointment.status = "COMPLETED";
+        }
+      }
+
+      setStatus(status, "Saving clinical notes…");
       const summary = await MC.saveSummary(
         appointment.appointmentId,
         {
@@ -2269,9 +2399,27 @@
       );
 
       state.doctor.summary = summary;
-      setStatus(status, "Summary saved. The patient can now read it.");
+      setStatus(
+        status,
+        "Notes and prescription saved successfully! The patient can now view them."
+      );
+      if (save) {
+        save.textContent = "Update notes";
+      }
+
+      const reason = document.querySelector("[data-notes-reason]");
+      if (reason) {
+        reason.textContent =
+          "Status: Completed · Payment: " +
+          (appointment.paymentStatus === "PAID" ? "Paid" : "Not paid") +
+          (appointment.bookingReference
+            ? " · Ref " + referenceOf(appointment.bookingReference)
+            : "");
+      }
+
+      await loadDoctorNotesPicker(appointment.appointmentId);
     } catch (error) {
-      setStatus(status, error.message, true);
+      setStatus(status, error.message || "Could not save notes.", true);
     } finally {
       if (save) save.disabled = false;
     }
@@ -2297,7 +2445,9 @@
       const appointments = (Array.isArray(list) ? list : []).filter(
         (item) =>
           item &&
-          ["IN_CONSULTATION", "COMPLETED"].includes(item.status)
+          (S.role === "DOCTOR"
+            ? ["IN_CONSULTATION", "COMPLETED", "ARRIVED", "BOOKED"].includes(item.status)
+            : ["IN_CONSULTATION", "COMPLETED"].includes(item.status))
       );
 
       state.consult.list = appointments;
@@ -2325,9 +2475,9 @@
               " · " +
               formatDate(appointment.sessionDate) +
               " · " +
-              (appointment.status === "IN_CONSULTATION"
-                ? "In consultation"
-                : "Completed")
+              (APPT_STATUS[appointment.status]
+                ? APPT_STATUS[appointment.status][0]
+                : titleCase(appointment.status))
           );
           option.value = appointment.appointmentId;
           select.append(option);
@@ -2465,6 +2615,51 @@
       note.textContent = active
         ? "Messages are stored securely. The doctor can complete the consultation at any time."
         : "This consultation has ended, so the chat is read-only. The summary remains available.";
+    }
+
+    const completeBtn = document.querySelector("[data-doctor-complete-consult]");
+    if (completeBtn) {
+      completeBtn.hidden = !(S && S.role === "DOCTOR" && appointment.status === "IN_CONSULTATION");
+      completeBtn.onclick = async () => {
+        try {
+          completeBtn.disabled = true;
+          if (typeof MC.completeConsultation === "function") {
+            await MC.completeConsultation(appointment.appointmentId);
+          } else {
+            await MC.completeAndAdvance(appointment.appointmentId);
+          }
+          appointment.status = "COMPLETED";
+          state.doctor.selected = appointment;
+          nav("doctor");
+          setTimeout(() => {
+            activatePanel(
+              document.querySelector('[data-view="doctor"]'),
+              document.querySelector('[href="#doctor-n"]')
+            );
+            void selectNotes(appointment);
+          }, 100);
+        } catch (err) {
+          alert(err.message || "Could not complete consultation");
+          completeBtn.disabled = false;
+        }
+      };
+    }
+
+    const editNotesBtn = document.querySelector("[data-doctor-edit-notes]");
+    if (editNotesBtn) {
+      editNotesBtn.hidden = !(S && S.role === "DOCTOR");
+      editNotesBtn.onclick = (e) => {
+        e.preventDefault();
+        state.doctor.selected = appointment;
+        nav("doctor");
+        setTimeout(() => {
+          activatePanel(
+            document.querySelector('[data-view="doctor"]'),
+            document.querySelector('[href="#doctor-n"]')
+          );
+          void selectNotes(appointment);
+        }, 100);
+      };
     }
   }
 
@@ -2697,6 +2892,9 @@
 
       if (empty) empty.hidden = true;
       if (summary) summary.hidden = false;
+      if (line) {
+        line.textContent = "Consultation completed. Clinical summary and prescription are published above.";
+      }
       if (diagnosis) diagnosis.textContent = record.diagnosis || "—";
       if (prescription) {
         prescription.textContent =
@@ -3268,6 +3466,13 @@
 
     if (event.target.id === "consult-pick") {
       void openConsultation(event.target.value);
+    }
+
+    if (event.target.id === "doctor-notes-pick") {
+      const chosen = (state.doctor.allAppointments || []).find(
+        (a) => a.appointmentId === event.target.value
+      );
+      if (chosen) void selectNotes(chosen);
     }
   });
 

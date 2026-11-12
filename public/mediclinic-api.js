@@ -268,6 +268,15 @@
       );
     },
 
+    completeConsultation(appointmentId) {
+      return request(
+        "doctor/appointments/" +
+          encodeURIComponent(appointmentId) +
+          "/complete",
+        { method: "PATCH", body: {} }
+      );
+    },
+
     completeAndAdvance(appointmentId) {
       return request(
         "doctor/appointments/" +
