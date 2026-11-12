@@ -38,7 +38,7 @@ export default function LoginPage() {
 
       const result = data as LoginResponse;
       const destinations = {
-        CUSTOMER: "/appointments",
+        CUSTOMER: "/",
         DOCTOR: "/doctor/dashboard",
         MANAGER: "/manager/dashboard",
         ADMIN: "/admin/dashboard",
