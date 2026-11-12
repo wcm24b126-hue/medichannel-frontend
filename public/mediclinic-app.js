@@ -90,6 +90,8 @@
   let languageButton = null;
 
   const state = {
+    notifications: [],
+    notificationTimer: null,
     specialisationsLoaded: false,
     sessionsLoaded: false,
     sessionsLoading: false,
@@ -608,6 +610,8 @@
   function setSession(user) {
     if (!user || !HOME[user.role]) {
       S = null;
+      if (state.notificationTimer) clearInterval(state.notificationTimer);
+      state.notificationTimer = null;
       return;
     }
 
@@ -617,10 +621,15 @@
       email: user.email || "Signed in",
       name: user.email || "Signed in",
     };
+    if (state.notificationTimer) clearInterval(state.notificationTimer);
+    state.notificationTimer = setInterval(loadNotifications, 15000);
+    void loadNotifications();
   }
 
   function handleSessionExpired() {
     S = null;
+    if (state.notificationTimer) clearInterval(state.notificationTimer);
+    state.notificationTimer = null;
     disconnectRealtime();
     render();
     hideQueue();
@@ -800,6 +809,52 @@
     }
   }
 
+  async function loadNotifications() {
+    if (!S) return;
+    try {
+      const items = await MC.notifications();
+      if (!Array.isArray(items)) return;
+      const unread = items.filter((n) => !n.read);
+      const prevCount = (state.notifications || []).filter((n) => !n.read).length;
+      state.notifications = items;
+      if (unread.length > prevCount && unread.length > 0) {
+        const latest = unread[unread.length - 1];
+        showNotificationToast(latest);
+      }
+      renderNotificationBadge(unread.length);
+    } catch (e) {
+      // silently fail - notifications are non-critical
+    }
+  }
+
+  function showNotificationToast(n) {
+    const toast = document.createElement("div");
+    toast.className = "fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-brand/20 bg-white p-4 shadow-lg grid gap-2";
+    toast.setAttribute("role", "alert");
+    const title = document.createElement("b");
+    title.textContent = n.title || "Notification";
+    const msg = document.createElement("p");
+    msg.className = "text-sm text-slate2";
+    msg.textContent = n.message || "";
+    toast.append(title, msg);
+    if (n.appointmentId) {
+      const link = document.createElement("a");
+      link.href = "#consult";
+      link.className = "text-sm font-semibold text-brand hover:underline";
+      link.textContent = "Open consultation";
+      toast.append(link);
+    }
+    document.body.append(toast);
+    setTimeout(() => toast.remove(), 8000);
+  }
+
+  function renderNotificationBadge(count) {
+    let badge = document.querySelector("[data-notification-badge]");
+    if (!badge) return;
+    badge.textContent = count > 0 ? String(count) : "";
+    badge.hidden = count === 0;
+  }
+
   function renderSessions() {
     const list = document.querySelector("[data-session-list]");
     if (!list) return;
@@ -842,6 +897,10 @@
       badge(
         session.consultationType === "ONLINE" ? "Online" : "Physical",
         "blue"
+      ),
+      badge(
+        session.status === "OPEN" ? "Available" : session.status === "IN_PROGRESS" ? "In progress" : session.status === "COMPLETED" ? "Completed" : session.status === "CANCELLED" ? "Cancelled" : "Not available",
+        session.status === "OPEN" ? "green" : session.status === "IN_PROGRESS" ? "orange" : "slate"
       )
     );
 
@@ -906,14 +965,15 @@
       )
     );
 
+    const available = session.status === "OPEN";
     const book = el(
       "button",
       "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-peach border-peach text-white hover:bg-peach-d min-h-10 px-3.5 py-2",
-      full ? "No spots left" : closed ? "Booking closed" : "Book"
+      !available ? "Not available" : full ? "No spots left" : closed ? "Booking closed" : "Book"
     );
     book.type = "button";
     book.dataset.bookSession = session.sessionId;
-    book.disabled = full || closed;
+    book.disabled = !available || full || closed;
     footer.append(book);
 
     card.append(header, meta, capacityWrap, footer);

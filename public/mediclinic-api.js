@@ -151,6 +151,19 @@
       return request("sessions" + query(filters));
     },
 
+    // Notifications --------------------------------------------------
+    notifications() {
+      return request("notifications");
+    },
+
+    unreadNotificationCount() {
+      return request("notifications/unread-count");
+    },
+
+    markNotificationRead(id) {
+      return request("notifications/" + encodeURIComponent(id) + "/read", { method: "PATCH" });
+    },
+
     sessionQueue(sessionId) {
       return request(
         "sessions/" + encodeURIComponent(sessionId) + "/queue"
