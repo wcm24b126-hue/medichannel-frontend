@@ -22,6 +22,7 @@ export default function AdminUsers() {
   const [specialisations, setSpecialisations] = useState<Specialisation[]>([]);
   const [loadingSpecialisations, setLoadingSpecialisations] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<DoctorCreated | null>(null);
 
@@ -57,6 +58,23 @@ export default function AdminUsers() {
       active = false;
     };
   }, []);
+
+  async function activateCreatedDoctor() {
+    if (!success) return;
+    setError("");
+    setActivating(true);
+    try {
+      const activated = await apiRequest<{ accountStatus: string }>(
+        `admin/users/${success.userId}/activate`,
+        { method: "PATCH" }
+      );
+      setSuccess({ ...success, accountStatus: activated.accountStatus });
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "The doctor was created but could not be activated.");
+    } finally {
+      setActivating(false);
+    }
+  }
 
   async function createDoctor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,8 +158,17 @@ export default function AdminUsers() {
               <p className="mt-1">{success.message}</p>
               <p className="mt-2">Email: {success.email}</p>
               <p>Registration number: {success.registrationNumber}</p>
-              <p>Account status: {success.accountStatus}</p>
-              <p className="mt-2 text-xs">The account is pending activation. Activate it through the staff account controls before the doctor signs in.</p>
+              <p>Account status: <strong>{success.accountStatus}</strong></p>
+              {success.accountStatus === "PENDING" ? (
+                <div className="mt-3">
+                  <p className="mb-3 text-xs">The doctor cannot sign in until an administrator activates this account.</p>
+                  <button type="button" onClick={() => void activateCreatedDoctor()} disabled={activating} className="primary-button disabled:opacity-60">
+                    {activating ? "Activating account…" : "Activate doctor account"}
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-2 text-xs">The account is active. The doctor can now sign in using the email address and password set above.</p>
+              )}
             </div>
           )}
 
