@@ -2074,8 +2074,8 @@
             appointment.appointmentId
           ),
           doctorAction(
-            "Chat",
-            "bg-white border-line text-slate2 hover:bg-snow",
+            "💬 Chat",
+            "bg-white border-line text-brand font-semibold hover:bg-snow",
             "chat",
             appointment.appointmentId
           )
@@ -2157,9 +2157,23 @@
         await MC.markNoShow(appointmentId);
         setStatus(statusNode, "Appointment marked as a no-show.");
       } else if (name === "notes" || name === "chat") {
+        if (button) button.disabled = false;
         if (name === "chat") {
           state.consult.requestedId = appointmentId;
           nav("consult");
+          setTimeout(async () => {
+            const select = $("consult-pick");
+            if (select) select.value = appointmentId;
+            await openConsultation(appointmentId);
+            const chatSection = document.querySelector('section[aria-label="Chat"]');
+            if (chatSection) {
+              chatSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+            const chatInput = $("consult-c");
+            if (chatInput && !chatInput.disabled) {
+              chatInput.focus();
+            }
+          }, 150);
           return;
         }
         const queue = state.doctor.queue;
@@ -2529,10 +2543,20 @@
       (item) => item.appointmentId === appointmentId
     );
 
-    if (!appointment && S.role === "CUSTOMER") {
+    if (!appointment && S && S.role === "CUSTOMER") {
       appointment = state.appointments.find(
         (item) => item.appointmentId === appointmentId
       );
+    }
+
+    if (!appointment && S && S.role === "DOCTOR") {
+      appointment =
+        (state.doctor.allAppointments || []).find(
+          (item) => item.appointmentId === appointmentId
+        ) ||
+        (state.doctor.queue && state.doctor.queue.appointments || []).find(
+          (item) => item.appointmentId === appointmentId
+        );
     }
 
     if (!appointment) {
@@ -2560,6 +2584,17 @@
     ]);
 
     subscribeConsultation(appointment);
+
+    setTimeout(() => {
+      const chatSection = document.querySelector('section[aria-label="Chat"]');
+      if (chatSection) {
+        chatSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      const chatInput = $("consult-c");
+      if (chatInput && !chatInput.disabled) {
+        chatInput.focus();
+      }
+    }, 50);
   }
 
   function renderConsultHeader(appointment) {
