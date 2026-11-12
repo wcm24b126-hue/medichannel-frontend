@@ -417,6 +417,10 @@
     if (link.hash === "#doctor-n") {
       void loadDoctorNotesPicker();
     }
+
+    if (link.hash === "#admin-u" || link.hash === "#manager-u" || link.hash === "#admin" || link.hash === "#manager") {
+      void loadStaffAccounts();
+    }
   }
 
   function initPanels(view, requestedPanel) {
@@ -457,6 +461,10 @@
 
     if (active.id === "doctor-n") {
       void loadDoctorNotesPicker();
+    }
+
+    if (active.id === "admin-u" || active.id === "manager-u") {
+      void loadStaffAccounts();
     }
   }
 
@@ -535,6 +543,9 @@
       void loadConsultationPicker();
     } else if (id === "admin") {
       void loadAdminSpecialisations();
+      void loadStaffAccounts();
+    } else if (id === "manager") {
+      void loadStaffAccounts();
     }
 
     if (["welcome", "index", "appointments"].includes(id)) {
@@ -3289,6 +3300,93 @@
     }
   }
 
+    async function loadStaffAccounts() {
+    const adminTbody = document.querySelector("[data-staff-tbody]");
+    const managerTbody = document.querySelector("[data-manager-staff-tbody]");
+    if (!adminTbody && !managerTbody) return;
+
+    try {
+      const [usersResp, doctorsResp] = await Promise.allSettled([
+        typeof MC.adminUsers === "function" ? MC.adminUsers() : (MC.request ? MC.request("admin/users") : Promise.resolve([])),
+        typeof MC.doctors === "function" ? MC.doctors() : (MC.request ? MC.request("doctors") : Promise.resolve([]))
+      ]);
+
+      const users = (usersResp.status === "fulfilled" && Array.isArray(usersResp.value))
+        ? usersResp.value
+        : [];
+      const doctors = (doctorsResp.status === "fulfilled" && Array.isArray(doctorsResp.value))
+        ? doctorsResp.value
+        : [];
+
+      const staffList = users.filter((u) => ["DOCTOR", "MANAGER", "ADMIN"].includes(u.role));
+
+      function renderStaffRows(tbody, isActionable) {
+        if (!tbody) return;
+        tbody.replaceChildren();
+
+        if (!staffList.length) {
+          const tr = el("tr");
+          tr.innerHTML = '<td colspan="5" class="text-center py-4 text-mute">No staff accounts found.</td>';
+          tbody.append(tr);
+          return;
+        }
+
+        staffList.forEach((member) => {
+          const tr = el("tr");
+
+          let displayName = member.email;
+          if (member.role === "DOCTOR") {
+            const emailPart = member.email.split("@")[0].toLowerCase().replace(/[^a-z]/g, "");
+            const matched = doctors.find((d) => {
+              const docName = ((d.firstName || "") + (d.lastName || "")).toLowerCase().replace(/[^a-z]/g, "");
+              return docName.includes(emailPart) || emailPart.includes(docName.slice(0, 4));
+            });
+            displayName = matched
+              ? "Dr. " + matched.firstName + " " + matched.lastName
+              : "Dr. " + titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim());
+          } else if (member.role === "MANAGER") {
+            displayName = member.email.startsWith("manager") ? "Ruwan Silva (Manager)" : titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()) + " (Manager)";
+          } else if (member.role === "ADMIN") {
+            displayName = member.email.startsWith("admin") ? "Isuru Bandara (Admin)" : titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()) + " (Admin)";
+          }
+
+          const roleBadge = member.role === "DOCTOR"
+            ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-teal-50 text-teal-900 border-teal-200">Doctor</span>'
+            : member.role === "MANAGER"
+            ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-yellow-100 text-yellow-900 border-yellow-200">Manager</span>'
+            : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-red-100 text-red-900 border-red-200">Admin</span>';
+
+          const isActive = member.accountStatus === "ACTIVE";
+          const statusBadge = isActive
+            ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-green-50 text-green-800 border-green-200">Active</span>'
+            : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-orange-50 text-orange-800 border-orange-200">' + member.accountStatus + '</span>';
+
+          let actionHtml = "";
+          if (isActionable) {
+            const toggleBtn = isActive
+              ? `<button type="button" data-toggle-user="${member.userId}" data-action="suspend" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Deactivate</button>`
+              : `<button type="button" data-toggle-user="${member.userId}" data-action="activate" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-8 px-2.5 py-1 text-xs">Activate</button>`;
+            actionHtml = `<td data-label="">${toggleBtn}</td>`;
+          }
+
+          tr.innerHTML = `
+            <td data-label="Name" class="font-semibold text-ink">${displayName}</td>
+            <td data-label="Email" class="text-slate2">${member.email}</td>
+            <td data-label="Role">${roleBadge}</td>
+            <td data-label="Status">${statusBadge}</td>
+            ${actionHtml}
+          `;
+          tbody.append(tr);
+        });
+      }
+
+      renderStaffRows(adminTbody, true);
+      renderStaffRows(managerTbody, false);
+    } catch (err) {
+      console.warn("Could not load staff accounts:", err);
+    }
+  }
+
   async function handleAdminCreateDoctor(form) {
     const status = form.querySelector("[data-admin-create-status]");
     const button = form.querySelector("button[type=submit]");
@@ -3325,13 +3423,19 @@
 
     try {
       const result = await MC.adminCreateDoctor(payload);
+      if (result && result.userId && result.accountStatus === "PENDING" && typeof MC.adminActivateUser === "function") {
+        try {
+          await MC.adminActivateUser(result.userId);
+        } catch (_) {}
+      }
       setStatus(
         status,
         "Doctor account created for " +
           (result && (result.email || payload.email)) +
-          ". The temporary password must be changed at first login."
+          ". The account is active and ready for login."
       );
       form.reset();
+      void loadStaffAccounts();
     } catch (error) {
       setStatus(status, error.message || "Unable to create the doctor.", true);
     } finally {
@@ -3655,7 +3759,39 @@
     }
   });
 
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-refresh-staff]")) {
+      const btn = event.target.closest("[data-refresh-staff]");
+      btn.disabled = true;
+      try {
+        await loadStaffAccounts();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    const toggleBtn = event.target.closest("[data-toggle-user]");
+    if (toggleBtn) {
+      const userId = toggleBtn.getAttribute("data-toggle-user");
+      const action = toggleBtn.getAttribute("data-action");
+      if (userId) {
+        toggleBtn.disabled = true;
+        try {
+          if (action === "suspend") {
+            await MC.adminSuspendUser(userId);
+          } else {
+            await MC.adminActivateUser(userId);
+          }
+          await loadStaffAccounts();
+        } catch (err) {
+          setAppMessage(err.message || "Failed to update user status.");
+          toggleBtn.disabled = false;
+        }
+      }
+      return;
+    }
+
     const showButton = event.target.closest("[data-show]");
     if (showButton) {
       const input = $(showButton.closest("[data-view]").dataset.view + "-" + showButton.dataset.show);

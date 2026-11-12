@@ -143,6 +143,10 @@
     },
 
     // Discovery ------------------------------------------------------
+    doctors(filters) {
+      return request("doctors" + query(filters));
+    },
+
     specialisations() {
       return request("specialisations");
     },
@@ -176,6 +180,30 @@
         method: "POST",
         body: payload,
       });
+    },
+
+    adminUsers(params) {
+      return request("admin/users" + query(params));
+    },
+
+    adminActivateUser(userId) {
+      return request(
+        "admin/users/" + encodeURIComponent(userId) + "/activate",
+        {
+          method: "PATCH",
+          body: {},
+        }
+      );
+    },
+
+    adminSuspendUser(userId) {
+      return request(
+        "admin/users/" + encodeURIComponent(userId) + "/suspend",
+        {
+          method: "PATCH",
+          body: {},
+        }
+      );
     },
 
     // Patient appointments -------------------------------------------
@@ -301,6 +329,10 @@
           body: summary,
         }
       );
+    },
+
+    request(path, options) {
+      return request(path, options);
     },
   };
 
