@@ -57,6 +57,7 @@ body[data-app-ready="true"]>.app-boot-screen{display:none}
 <div><label for="admin-spec">Specialisation</label><select id="admin-spec" required><option value="">Loading specialisations…</option></select></div>
 <div><label for="admin-fee">Consultation fee (LKR)</label><input id="admin-fee" type="number" min="0" step="0.01" inputmode="decimal" required></div>
 <div><label for="admin-pw">Initial password (12+ chars)</label><input id="admin-pw" type="password" minlength="12" maxlength="72" autocomplete="new-password" required></div>
+<div><label for="admin-cf">Confirm password</label><input id="admin-cf" type="password" minlength="12" maxlength="72" autocomplete="new-password" required></div>
 <p class="col-span-full px-4 py-3 border rounded-lg bg-sky-50 border-sky-200 text-sky-900 text-xs">The password is temporary. The doctor must change it at first login.</p>
 <p data-admin-create-status class="col-span-full rounded-lg border px-4 py-3 text-sm" hidden></p>
 <button class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-brand border-brand text-white hover:bg-brand-d min-h-10 px-3.5 py-2 col-span-full justify-center" type="submit">Create account</button>

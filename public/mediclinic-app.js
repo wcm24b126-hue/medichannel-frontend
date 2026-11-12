@@ -2791,9 +2791,13 @@
     const status = form.querySelector("[data-admin-create-status]");
     const button = form.querySelector("button[type=submit]");
 
+    const initialPassword = ($("admin-pw") || {}).value || "";
+    const confirmPassword = ($("admin-cf") || {}).value || "";
+
     const payload = {
       email: ($("admin-em") || {}).value || "",
-      initialPassword: ($("admin-pw") || {}).value || "",
+      initialPassword: initialPassword,
+      confirmPassword: confirmPassword,
       firstName: ($("admin-fn") || {}).value || "",
       lastName: ($("admin-ln") || {}).value || "",
       registrationNumber: ($("admin-reg") || {}).value || "",
@@ -2802,10 +2806,15 @@
       consultationFee: Number(($("admin-fee") || {}).value || 0),
     };
 
-    if (!payload.email || !payload.initialPassword || !payload.firstName ||
+    if (!payload.email || !initialPassword || !confirmPassword || !payload.firstName ||
         !payload.lastName || !payload.registrationNumber ||
         !payload.specialisationId || !(payload.consultationFee >= 0)) {
       setStatus(status, "Please fill in every required field.", true);
+      return;
+    }
+
+    if (initialPassword !== confirmPassword) {
+      setStatus(status, "The passwords do not match.", true);
       return;
     }
 
