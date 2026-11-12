@@ -622,6 +622,7 @@
       name: user.email || "Signed in",
     };
     if (state.notificationTimer) clearInterval(state.notificationTimer);
+    subscribe("private-notifications", "/user/queue/notifications", handleIncomingNotification);
     state.notificationTimer = setInterval(loadNotifications, 15000);
     void loadNotifications();
   }
@@ -807,6 +808,19 @@
     } finally {
       state.sessionsLoading = false;
     }
+  }
+
+  function handleIncomingNotification(notification) {
+    if (!S || !notification || !notification.notificationId) return;
+    const exists = state.notifications.some(
+      (item) => item.notificationId === notification.notificationId
+    );
+    if (exists) return;
+
+    state.notifications.unshift(notification);
+    const unreadCount = state.notifications.filter((item) => !item.read).length;
+    renderNotificationBadge(unreadCount);
+    showNotificationToast(notification);
   }
 
   async function loadNotifications() {
@@ -2952,6 +2966,7 @@
           dateOfBirth: values.dob,
           gender: values.gen,
           phone: values.ph,
+          address: values.address,
         }),
       });
 
