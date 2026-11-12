@@ -170,6 +170,14 @@
       );
     },
 
+    // Admin -----------------------------------------------------------
+    adminCreateDoctor(payload) {
+      return request("doctors", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
     // Patient appointments -------------------------------------------
     myAppointments() {
       return request("appointments/me");

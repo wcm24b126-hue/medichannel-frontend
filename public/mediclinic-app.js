@@ -525,6 +525,8 @@
       void loadDoctorConsole();
     } else if (id === "consult") {
       void loadConsultationPicker();
+    } else if (id === "admin") {
+      void loadAdminSpecialisations();
     }
 
     if (["welcome", "index", "appointments"].includes(id)) {
@@ -2752,6 +2754,80 @@
     }
   }
 
+  async function loadAdminSpecialisations() {
+    const select = $("admin-spec");
+    if (!select || select.dataset.loaded === "true") return;
+
+    try {
+      const items = await MC.specialisations();
+      if (!Array.isArray(items)) return;
+      select.replaceChildren();
+
+      const placeholder = el("option", "", "Select specialisation…");
+      placeholder.value = "";
+      placeholder.selected = true;
+      placeholder.disabled = true;
+      select.append(placeholder);
+
+      items.forEach((specialisation) => {
+        const option = el(
+          "option",
+          "",
+          specialisation.name || specialisation.displayName || specialisation.title || "Specialisation"
+        );
+        option.value = specialisation.specialisationId || specialisation.id;
+        select.append(option);
+      });
+
+      select.dataset.loaded = "true";
+    } catch (error) {
+      // Fall back silently; creation will surface the real error.
+      select.dataset.loaded = "true";
+      console.error(error);
+    }
+  }
+
+  async function handleAdminCreateDoctor(form) {
+    const status = form.querySelector("[data-admin-create-status]");
+    const button = form.querySelector("button[type=submit]");
+
+    const payload = {
+      email: ($("admin-em") || {}).value || "",
+      initialPassword: ($("admin-pw") || {}).value || "",
+      firstName: ($("admin-fn") || {}).value || "",
+      lastName: ($("admin-ln") || {}).value || "",
+      registrationNumber: ($("admin-reg") || {}).value || "",
+      qualification: ($("admin-qual") || {}).value || "",
+      specialisationId: ($("admin-spec") || {}).value || "",
+      consultationFee: Number(($("admin-fee") || {}).value || 0),
+    };
+
+    if (!payload.email || !payload.initialPassword || !payload.firstName ||
+        !payload.lastName || !payload.registrationNumber ||
+        !payload.specialisationId || !(payload.consultationFee >= 0)) {
+      setStatus(status, "Please fill in every required field.", true);
+      return;
+    }
+
+    if (button) button.disabled = true;
+    setStatus(status, "Creating doctor account…");
+
+    try {
+      const result = await MC.adminCreateDoctor(payload);
+      setStatus(
+        status,
+        "Doctor account created for " +
+          (result && (result.email || payload.email)) +
+          ". The temporary password must be changed at first login."
+      );
+      form.reset();
+    } catch (error) {
+      setStatus(status, error.message || "Unable to create the doctor.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   function printSummary() {
     const appointment = state.consult.appointment;
     const summary = state.consult.summary;
@@ -3217,6 +3293,14 @@
     feedbackForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitFeedback();
+    });
+  }
+
+  const adminCreateForm = document.querySelector("[data-admin-create-form]");
+  if (adminCreateForm) {
+    adminCreateForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void handleAdminCreateDoctor(adminCreateForm);
     });
   }
 
