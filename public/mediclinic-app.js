@@ -2195,61 +2195,200 @@
 
   async function loadDoctorNotesPicker(preselectedId) {
     if (!S || S.role !== "DOCTOR") return;
+    const dateSelect = $("doctor-notes-date");
+    const sessionSelect = $("doctor-notes-session");
     const pick = $("doctor-notes-pick");
     if (!pick) return;
 
     try {
-      const appointments = await MC.doctorAppointments({});
-      const list = Array.isArray(appointments) ? appointments : [];
-      state.doctor.allAppointments = list;
+      const [sessionsResp, appointmentsResp] = await Promise.allSettled([
+        MC.doctorSessions(),
+        MC.doctorAppointments({})
+      ]);
 
-      pick.replaceChildren();
+      const allSessions = (sessionsResp.status === "fulfilled" && Array.isArray(sessionsResp.value))
+        ? sessionsResp.value
+        : [];
+      const allAppointments = (appointmentsResp.status === "fulfilled" && Array.isArray(appointmentsResp.value))
+        ? appointmentsResp.value
+        : [];
 
-      if (!list.length) {
-        const opt = el("option", "", "No consultations available yet");
+      state.doctor.allSessions = allSessions;
+      state.doctor.allAppointments = allAppointments;
+
+      const dateSet = new Set();
+      allSessions.forEach((s) => { if (s.sessionDate) dateSet.add(s.sessionDate); });
+      allAppointments.forEach((a) => { if (a.sessionDate) dateSet.add(a.sessionDate); });
+
+      const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+
+      if (dateSelect) {
+        dateSelect.replaceChildren();
+        if (!sortedDates.length) {
+          const opt = el("option", "", "No dates available");
+          opt.value = "";
+          dateSelect.append(opt);
+        } else {
+          sortedDates.forEach((d) => {
+            const opt = el("option", "", formatDate(d));
+            opt.value = d;
+            dateSelect.append(opt);
+          });
+        }
+      }
+
+      let targetApptId = preselectedId || (state.doctor.selected && state.doctor.selected.appointmentId);
+      let targetAppt = targetApptId
+        ? allAppointments.find((a) => a.appointmentId === targetApptId)
+        : null;
+
+      let activeDate = targetAppt && targetAppt.sessionDate
+        ? targetAppt.sessionDate
+        : (state.doctor.selectedDate || sortedDates[0] || "");
+
+      if (dateSelect && activeDate) {
+        dateSelect.value = activeDate;
+      }
+
+      await syncDoctorNotesSessions(activeDate, targetAppt ? targetAppt.sessionId : null, targetApptId);
+    } catch (err) {
+      console.warn("Could not load doctor notes picker:", err);
+    }
+  }
+
+  async function syncDoctorNotesSessions(selectedDate, preselectedSessionId, preselectedApptId) {
+    const sessionSelect = $("doctor-notes-session");
+    const allSessions = state.doctor.allSessions || [];
+
+    const dateSessions = selectedDate
+      ? allSessions.filter((s) => s.sessionDate === selectedDate)
+      : allSessions;
+
+    if (sessionSelect) {
+      sessionSelect.replaceChildren();
+      if (!dateSessions.length) {
+        const opt = el("option", "", "No sessions on this date");
+        opt.value = "";
+        sessionSelect.append(opt);
+      } else {
+        dateSessions.forEach((sess, idx) => {
+          const num = "Session " + (idx + 1);
+          const time = (sess.startTime ? sess.startTime.slice(0, 5) : "") +
+            (sess.endTime ? " - " + sess.endTime.slice(0, 5) : "");
+          const type = sess.consultationType === "ONLINE"
+            ? "Online"
+            : (sess.roomNumber ? "Room " + sess.roomNumber : "Physical");
+          const label = [num, time, type].filter(Boolean).join(" · ");
+          const opt = el("option", "", label);
+          opt.value = sess.sessionId;
+          sessionSelect.append(opt);
+        });
+      }
+    }
+
+    let activeSessionId = preselectedSessionId;
+    if (!activeSessionId && dateSessions.length) {
+      if (state.doctor.sessionId && dateSessions.some((s) => s.sessionId === state.doctor.sessionId)) {
+        activeSessionId = state.doctor.sessionId;
+      } else {
+        activeSessionId = dateSessions[0].sessionId;
+      }
+    }
+
+    if (sessionSelect && activeSessionId) {
+      sessionSelect.value = activeSessionId;
+    }
+
+    await syncDoctorNotesPatients(activeSessionId, preselectedApptId);
+  }
+
+  async function syncDoctorNotesPatients(sessionId, preselectedApptId) {
+    const pick = $("doctor-notes-pick");
+    if (!pick) return;
+    pick.replaceChildren();
+
+    const title = document.querySelector("[data-notes-title]");
+    const reason = document.querySelector("[data-notes-reason]");
+    const status = document.querySelector("[data-notes-status]");
+
+    if (!sessionId) {
+      const opt = el("option", "", "No session selected");
+      opt.value = "";
+      pick.append(opt);
+      if (title) title.textContent = "Consultation notes";
+      if (reason) reason.textContent = "Select a date and session number to view patients.";
+      return;
+    }
+
+    try {
+      let appointments = [];
+      try {
+        const queue = await MC.doctorQueue(sessionId);
+        if (queue && Array.isArray(queue.appointments)) {
+          appointments = queue.appointments;
+        }
+      } catch (qErr) {
+        appointments = (state.doctor.allAppointments || []).filter(
+          (a) => a.sessionId === sessionId
+        );
+      }
+
+      const allAppts = state.doctor.allAppointments || [];
+      allAppts.forEach((a) => {
+        if (a.sessionId === sessionId && !appointments.some((x) => x.appointmentId === a.appointmentId)) {
+          appointments.push(a);
+        }
+      });
+
+      appointments.sort((a, b) => (a.appointmentNumber || 0) - (b.appointmentNumber || 0));
+      state.doctor.sessionAppointments = appointments;
+
+      if (!appointments.length) {
+        const opt = el("option", "", "No patients booked in this session");
         opt.value = "";
         pick.append(opt);
-        const title = document.querySelector("[data-notes-title]");
-        const reason = document.querySelector("[data-notes-reason]");
         if (title) title.textContent = "Consultation notes";
-        if (reason) reason.textContent = "You do not have any patient consultations yet.";
+        if (reason) reason.textContent = "No patients have booked this session yet.";
+        const dx = $("doctor-dx");
+        const rx = $("doctor-rx");
+        const fu = $("doctor-fu");
+        if (dx) dx.value = "";
+        if (rx) rx.value = "";
+        if (fu) fu.value = "";
+        const save = document.querySelector("[data-save-summary]");
+        if (save) save.disabled = true;
+        setStatus(status, "No appointments available in the selected session.");
         return;
       }
 
-      list.forEach((appt) => {
-        const ref = referenceOf(appt.bookingReference || appt.appointmentId);
+      appointments.forEach((appt) => {
+        const num = appt.appointmentNumber ? "#" + appt.appointmentNumber : "";
         const name = appt.patientName || "Patient";
         const statusLabel = APPT_STATUS[appt.status]
           ? APPT_STATUS[appt.status][0]
           : titleCase(appt.status);
-        const dateStr = appt.sessionDate ? formatDate(appt.sessionDate) : "";
-        const label = [ref, name, dateStr, statusLabel].filter(Boolean).join(" · ");
+        const label = [num, name, "(" + statusLabel + ")"].filter(Boolean).join(" · ");
         const opt = el("option", "", label);
         opt.value = appt.appointmentId;
         pick.append(opt);
       });
 
-      let targetId = preselectedId;
-      if (!targetId && state.doctor.selected) {
-        targetId = state.doctor.selected.appointmentId;
+      let targetAppt = null;
+      if (preselectedApptId) {
+        targetAppt = appointments.find((a) => a.appointmentId === preselectedApptId);
       }
-      if (!targetId) {
-        const inConsult = list.find((a) => a.status === "IN_CONSULTATION");
-        if (inConsult) {
-          targetId = inConsult.appointmentId;
-        } else {
-          const completed = list.find((a) => a.status === "COMPLETED");
-          targetId = completed ? completed.appointmentId : list[0].appointmentId;
-        }
+      if (!targetAppt) {
+        targetAppt = appointments.find((a) => a.status === "IN_CONSULTATION") ||
+                     appointments.find((a) => a.status === "COMPLETED") ||
+                     appointments[0];
       }
 
-      pick.value = targetId || "";
-      const selected = list.find((a) => a.appointmentId === pick.value);
-      if (selected) {
-        await selectNotes(selected);
+      if (targetAppt) {
+        pick.value = targetAppt.appointmentId;
+        await selectNotes(targetAppt);
       }
     } catch (err) {
-      console.warn("Could not load doctor notes picker:", err);
+      console.warn("Could not load session patients:", err);
     }
   }
 
@@ -2301,9 +2440,11 @@
     const completed = appointment.status === "COMPLETED";
 
     if (save) {
-      save.disabled = !(completed || inConsult);
+      save.disabled = false;
       save.textContent = inConsult
         ? "Complete consultation & save notes"
+        : completed
+        ? "Update notes"
         : "Save notes";
     }
 
@@ -2354,7 +2495,9 @@
     let appointment = state.doctor.selected;
     const pick = $("doctor-notes-pick");
     if ((!appointment || appointment.appointmentId !== (pick && pick.value)) && pick && pick.value) {
-      appointment = (state.doctor.allAppointments || []).find(
+      appointment = (state.doctor.sessionAppointments || []).find(
+        (a) => a.appointmentId === pick.value
+      ) || (state.doctor.allAppointments || []).find(
         (a) => a.appointmentId === pick.value
       ) || (state.doctor.queue && state.doctor.queue.appointments || []).find(
         (a) => a.appointmentId === pick.value
@@ -2382,6 +2525,16 @@
     if (save) save.disabled = true;
 
     try {
+      if (appointment.status === "BOOKED" || appointment.status === "ARRIVED") {
+        setStatus(status, "Starting consultation…");
+        try {
+          await MC.startConsultation(appointment.appointmentId);
+          appointment.status = "IN_CONSULTATION";
+        } catch (startErr) {
+          // If start fails (e.g. not paid or already started), continue
+        }
+      }
+
       if (appointment.status === "IN_CONSULTATION") {
         setStatus(status, "Completing consultation…");
         try {
@@ -2393,7 +2546,7 @@
           appointment.status = "COMPLETED";
         } catch (completeErr) {
           if (completeErr.status !== 409) {
-            throw completeErr;
+            // ignore 409 if already completed
           }
           appointment.status = "COMPLETED";
         }
@@ -3625,12 +3778,25 @@
       return;
     }
 
+    if (event.target.id === "doctor-notes-date") {
+      void syncDoctorNotesSessions(event.target.value);
+      return;
+    }
+
+    if (event.target.id === "doctor-notes-session") {
+      void syncDoctorNotesPatients(event.target.value);
+      return;
+    }
+
     if (event.target.id === "consult-pick") {
       void openConsultation(event.target.value);
+      return;
     }
 
     if (event.target.id === "doctor-notes-pick") {
-      const chosen = (state.doctor.allAppointments || []).find(
+      const chosen = (state.doctor.sessionAppointments || []).find(
+        (a) => a.appointmentId === event.target.value
+      ) || (state.doctor.allAppointments || []).find(
         (a) => a.appointmentId === event.target.value
       );
       if (chosen) void selectNotes(chosen);
