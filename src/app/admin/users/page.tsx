@@ -141,7 +141,7 @@ export default function AdminUsers() {
           <div className="mb-5">
             <h2 className="text-lg font-bold text-slate-900">Create a doctor account</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Enter the doctor's professional details and set an initial password.
+              Enter the doctor&apos;s professional details and set an initial password.
               The password is securely hashed by the backend before it is stored.
             </p>
           </div>
