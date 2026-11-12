@@ -149,27 +149,27 @@ export default function AdminUsers() {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium text-slate-700">
                 First name
-                <input required maxLength={100} value={firstName} onChange={(e) => setFirstName(e.target.value)} className="input mt-1 w-full" autoComplete="given-name" />
+                <input required maxLength={100} value={firstName} onChange={(e) => setFirstName(e.target.value)} className="field w-full" autoComplete="given-name" />
               </label>
               <label className="block text-sm font-medium text-slate-700">
                 Last name
-                <input required maxLength={100} value={lastName} onChange={(e) => setLastName(e.target.value)} className="input mt-1 w-full" autoComplete="family-name" />
+                <input required maxLength={100} value={lastName} onChange={(e) => setLastName(e.target.value)} className="field w-full" autoComplete="family-name" />
               </label>
               <label className="block text-sm font-medium text-slate-700">
                 Email address
-                <input required type="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} className="input mt-1 w-full" autoComplete="email" />
+                <input required type="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} className="field w-full" autoComplete="email" />
               </label>
               <label className="block text-sm font-medium text-slate-700">
                 Medical registration number
-                <input required maxLength={100} value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value)} className="input mt-1 w-full" />
+                <input required maxLength={100} value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value)} className="field w-full" />
               </label>
               <label className="block text-sm font-medium text-slate-700">
                 Qualification
-                <input maxLength={255} value={qualification} onChange={(e) => setQualification(e.target.value)} className="input mt-1 w-full" placeholder="e.g. MBBS, MD" />
+                <input maxLength={255} value={qualification} onChange={(e) => setQualification(e.target.value)} className="field w-full" placeholder="e.g. MBBS, MD" />
               </label>
               <label className="block text-sm font-medium text-slate-700">
                 Specialisation
-                <select required value={specialisationId} onChange={(e) => setSpecialisationId(e.target.value)} disabled={loadingSpecialisations || specialisations.length === 0} className="input mt-1 w-full">
+                <select required value={specialisationId} onChange={(e) => setSpecialisationId(e.target.value)} disabled={loadingSpecialisations || specialisations.length === 0} className="field w-full">
                   {loadingSpecialisations ? <option value="">Loading specialisations…</option> : null}
                   {!loadingSpecialisations && specialisations.length === 0 ? <option value="">No active specialisations found</option> : null}
                   {specialisations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -177,7 +177,7 @@ export default function AdminUsers() {
               </label>
               <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
                 Consultation fee (LKR)
-                <input required type="number" min="0" step="0.01" value={consultationFee} onChange={(e) => setConsultationFee(e.target.value)} className="input mt-1 w-full sm:max-w-sm" />
+                <input required type="number" min="0" step="0.01" value={consultationFee} onChange={(e) => setConsultationFee(e.target.value)} className="field w-full sm:max-w-sm" />
               </label>
             </div>
 
@@ -190,11 +190,11 @@ export default function AdminUsers() {
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm font-medium text-slate-700">
                   New password
-                  <input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="input mt-1 w-full" />
+                  <input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="field w-full" />
                 </label>
                 <label className="block text-sm font-medium text-slate-700">
                   Confirm password
-                  <input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input mt-1 w-full" />
+                  <input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="field w-full" />
                 </label>
               </div>
             </div>
