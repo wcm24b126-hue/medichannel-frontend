@@ -82,10 +82,27 @@ async function main() {
       "no unverifiable crypto claims in the frontend"
     );
     assert(!text.includes("<iframe"), "no iframes in the static app");
+    const brandLinks =
+      text.match(/<a\b[^>]*>(?:(?!<\/a>)[\s\S])*?MediChannel[\s\S]*?<\/a>/g) ||
+      [];
     assert(
-      (text.match(/href="#welcome"/g) || []).length >= 12,
+      brandLinks.length >= 9 &&
+        brandLinks.every((link) => link.includes('href="#welcome"')),
       "every logo and app-name link returns to the welcome screen"
     );
+    for (const view of ["login", "register"]) {
+      const chunk = text.match(
+        new RegExp(`<section data-view="${view}"[\\s\\S]*?</section>`)
+      );
+      assert(
+        Boolean(chunk) &&
+          chunk[0].includes("lg:grid-cols-2") &&
+          chunk[0].includes("<aside") &&
+          chunk[0].includes('bg-gradient-to-br from-brand') &&
+          !chunk[0].includes("Demo accounts (prototype only)"),
+        `${view} uses the split promo layout on large screens`
+      );
+    }
   }
 
   console.log("\nSecurity headers");
@@ -179,6 +196,91 @@ async function main() {
     assert(
       (wake.response.headers.get("cache-control") || "").includes("no-store"),
       "wake responses are never cached"
+    );
+  }
+
+  console.log("\nSearch and discovery");
+  {
+    const sessions = await request("/api/backend/sessions");
+    assert(
+      sessions.response.status === 200,
+      "public session search is reachable"
+    );
+    assert(
+      Array.isArray(JSON.parse(sessions.text || "[]")),
+      "session search returns a list"
+    );
+
+    const filtered = await request(
+      "/api/backend/sessions?q=dr&consultationType=ONLINE"
+    );
+    assert(
+      filtered.response.status === 200,
+      "session search accepts a doctor query and consultation type"
+    );
+
+    const specialisations = await request("/api/backend/specialisations");
+    assert(
+      specialisations.response.status === 200 &&
+        Array.isArray(JSON.parse(specialisations.text || "[]")),
+      "specialisation list is available to the search filter"
+    );
+  }
+
+  console.log("\nAnonymous access is denied");
+  {
+    const appointmentId = "00000000-0000-0000-0000-000000000000";
+
+    const booking = await request("/api/backend/appointments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: appointmentId,
+        reasonForVisit: "Smoke test booking attempt",
+      }),
+    });
+    assert(
+      [401, 403].includes(booking.response.status),
+      "anonymous booking is rejected"
+    );
+
+    const chat = await request(
+      "/api/backend/appointments/" + appointmentId + "/chat/messages"
+    );
+    assert(
+      [401, 403].includes(chat.response.status),
+      "anonymous chat history is rejected"
+    );
+
+    const ticket = await request("/api/backend/auth/ws-ticket", {
+      method: "POST",
+    });
+    assert(
+      [401, 403].includes(ticket.response.status),
+      "anonymous WebSocket tickets are rejected"
+    );
+  }
+
+  console.log("\nRealtime configuration");
+  {
+    const config = await request("/api/realtime/config");
+    assert(config.response.status === 200, "realtime config is available");
+    const body = JSON.parse(config.text || "{}");
+    assert(
+      typeof body.websocketUrl === "string" &&
+        /^wss?:\/\//.test(body.websocketUrl),
+      "realtime config exposes a ws/wss endpoint"
+    );
+    assert(
+      (config.response.headers.get("cache-control") || "").includes("no-store"),
+      "realtime config is never cached"
+    );
+
+    const { response } = await request("/mediclinic-system.html");
+    const csp = response.headers.get("content-security-policy") || "";
+    assert(
+      /connect-src[^;]*wss:\/\//.test(csp),
+      "CSP allows the realtime WebSocket origin"
     );
   }
 

@@ -1,85 +1,3609 @@
-const $=id=>document.getElementById(id),views=[...document.querySelectorAll('[data-view]')];
-const RB={"CUSTOMER": ["inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-sky-50 text-blue-700 border-sky-200", "Customer"], "DOCTOR": ["inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-teal-50 text-teal-900 border-teal-200", "Doctor"], "MANAGER": ["inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-yellow-100 text-yellow-900 border-yellow-200", "Manager"], "ADMIN": ["inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-red-100 text-red-900 border-red-200", "Admin"]},HOME={CUSTOMER:'appointments',DOCTOR:'doctor',MANAGER:'manager',ADMIN:'admin'},ACL={appointments:'CUSTOMER',consult:'CUSTOMER',doctor:'DOCTOR',manager:'MANAGER',admin:'ADMIN'},AUTH=['login','register'];
-let S=null,flash='',queueRequest=null,wakePromise=null,bootTimer=null;
-const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const post=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(b||{})});
-const nav=id=>location.hash==='#'+id?go():location.hash=id;
-function setAppMessage(message){const notice=$('app-session-warning');notice.textContent=message;notice.hidden=!message}
-function setWakeMessage(message){const status=$('backend-wake-status');status.querySelector('[data-wake-message]').textContent=message;status.hidden=!message}
-function setPanel(view,panelId){const target=panelId?document.getElementById(panelId):null;if(!view||!target||!view.contains(target)||!target.matches('[data-dashboard-panel]'))return false;const y=window.scrollY;view.querySelectorAll('[data-dashboard-panel]').forEach(panel=>panel.hidden=panel!==target);view.querySelectorAll('[data-panel-link]').forEach(item=>{if(item.getAttribute('href')==='#'+panelId)item.setAttribute('aria-current','page');else item.removeAttribute('aria-current')});window.scrollTo(0,y);return true}
-function activatePanel(view,link){if(!view||!link)return;const panelId=link.hash.slice(1);if(!setPanel(view,panelId))return;try{history.replaceState(null,'','#'+panelId)}catch{}}
-function initPanels(view,requestedPanel){if(!view)return;const list=[...view.querySelectorAll('[data-dashboard-panel]')];if(!list.length)return;const currentLink=view.querySelector('[data-panel-link][aria-current]');const currentPanel=currentLink?list.find(panel=>'#'+panel.id===currentLink.getAttribute('href')):null;const active=(requestedPanel&&list.find(panel=>panel.id===requestedPanel))||currentPanel||list[0];const y=window.scrollY;list.forEach(panel=>panel.hidden=panel!==active);view.querySelectorAll('[data-panel-link]').forEach(item=>{if(item.getAttribute('href')==='#'+active.id)item.setAttribute('aria-current','page');else item.removeAttribute('aria-current')});window.scrollTo(0,y)}
-function wakeBackend(){if(wakePromise)return wakePromise;wakePromise=(async()=>{const delays=[3000,6000,10000,15000,20000];for(let attempt=0;attempt<=delays.length;attempt++){const slow=setTimeout(()=>setWakeMessage('Connecting to the hospital service…'),2200);try{const response=await fetch('/api/backend/wake',{credentials:'same-origin',cache:'no-store'});if(response.ok){setWakeMessage('');return true}}catch{}finally{clearTimeout(slow)}setWakeMessage(attempt<2?'The hospital service is starting…':'The hospital service is still starting. Thanks for waiting…');if(attempt<delays.length)await new Promise(resolve=>setTimeout(resolve,delays[attempt]))}setWakeMessage('The backend is still starting. Retry in a moment.');return false})().finally(()=>wakePromise=null);return wakePromise}
-function hideQueue(){document.querySelectorAll('[data-patient-queue-card]').forEach(panel=>panel.hidden=true)}
-function queueNumber(appointment){for(const key of ['appointmentNumber','queueNumber','tokenNumber']){const value=appointment&&appointment[key];const number=typeof value==='string'&&/^\d+$/.test(value.trim())?Number(value):value;if(Number.isSafeInteger(number)&&number>0)return number}return null}
-function showQueue(appointment){const number=queueNumber(appointment);if(!number)return hideQueue();document.querySelectorAll('[data-patient-queue-card]').forEach(panel=>{panel.querySelector('[data-queue-headline]').textContent=`You are number ${number}`;panel.querySelector('[data-queue-number]').textContent=String(number);const time=typeof appointment.sessionStartTime==='string'?appointment.sessionStartTime.slice(0,5):'';const rawDoctor=typeof appointment.doctorName==='string'?appointment.doctorName.trim():'';const doctor=rawDoctor?`${/^dr\.?\s/i.test(rawDoctor)?'':'Dr. '}${rawDoctor} · `:'';const statusText={BOOKED:'Confirmed for today',ARRIVED:'Checked in · waiting for your doctor',IN_CONSULTATION:'Your consultation is in progress'}[appointment.status]||'Confirmed for today';panel.querySelector('[data-queue-details]').textContent=`${doctor}${time?`Today at ${time} · `:''}${statusText}`;panel.hidden=false})}
-function renderAppointmentList(appointments){const body=document.querySelector('[data-appointments-list]');const empty=document.querySelector('[data-appointments-empty]');if(!body)return;body.replaceChildren();const records=appointments.filter(item=>item&&typeof item==='object');for(const appointment of records){const time=typeof appointment.sessionStartTime==='string'?appointment.sessionStartTime.slice(0,5):'';const type=typeof appointment.consultationType==='string'?appointment.consultationType.replaceAll('_',' ').toLowerCase():'—';const status=typeof appointment.status==='string'?appointment.status.replaceAll('_',' ').toLowerCase():'—';const payment=[appointment.paymentStatus,appointment.paymentMethod].filter(value=>typeof value==='string'&&value).map(value=>value.replaceAll('_',' ').toLowerCase()).join(' · ')||'—';const values=[appointment.bookingReference||appointment.appointmentId||'—',appointment.doctorName||'—',[appointment.sessionDate,time].filter(Boolean).join(' ')||'—',type,status,payment];const row=document.createElement('tr');for(let index=0;index<values.length;index++){const cell=document.createElement('td');cell.dataset.label=['Booking ref','Doctor','When','Visit type','Status','Payment'][index];cell.textContent=String(values[index]);row.append(cell)}body.append(row)}if(empty)empty.hidden=records.length>0}
-async function refreshQueue(){if(!S||S.role!=='CUSTOMER'){hideQueue();return}if(queueRequest)return queueRequest;queueRequest=(async()=>{try{const response=await fetch('/api/backend/appointments/me',{credentials:'same-origin',cache:'no-store'});if(response.status===401){hideQueue();S=null;render();nav('login');setAppMessage('Your session expired. Please sign in again.');return}if(!response.ok)throw new Error('Unable to load appointments');const appointments=await response.json();if(!Array.isArray(appointments))throw new Error('Unexpected appointment response');renderAppointmentList(appointments);const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Colombo'}).format(new Date());const current=appointments.filter(item=>item&&item.sessionDate===today&&queueNumber(item)&&['BOOKED','ARRIVED','IN_CONSULTATION'].includes(item.status)).sort((a,b)=>String(a.sessionStartTime||'').localeCompare(String(b.sessionStartTime||'')))[0];if(!S||S.role!=='CUSTOMER'){hideQueue();return}if(current)showQueue(current);else hideQueue();setAppMessage('')}catch{hideQueue();setAppMessage('Your appointments could not be loaded. Please try again later.')}})().finally(()=>queueRequest=null);return queueRequest}
-async function initializeApp(){let sessionUnavailable=false;for(let attempt=0;attempt<3;attempt++){try{const response=await fetch('/api/auth/me',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(6000)});if(response.status===401)break;if(!response.ok){sessionUnavailable=true;if(response.status<500||attempt===2)break}else{const result=await response.json();const user=result&&result.user;if(user&&HOME[user.role])S={role:user.role,name:user.email||'Signed in'};else sessionUnavailable=true;break}}catch{sessionUnavailable=true;if(attempt===2)break}await new Promise(resolve=>setTimeout(resolve,attempt===0?1000:3000))}if(bootTimer){clearTimeout(bootTimer);bootTimer=null}document.body.dataset.appReady='true';if(sessionUnavailable&&!S)setAppMessage('We could not verify your session. Please sign in again or retry.');render();go()}
-function render(){
- document.querySelectorAll('[data-who]').forEach(w=>w.innerHTML=S?`<span class="${RB[S.role][0]}">${RB[S.role][1]}</span><span class="hidden sm:inline">${esc(S.name)}</span><button type="button" data-out class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs">Log out</button>`:`<a href="#login" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs">Log in</a><a href="#register" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-peach border-peach text-white hover:bg-peach-d min-h-9 sm:min-h-8 px-2.5 py-1 text-xs">Register</a>`);
- document.querySelectorAll('[data-roles]').forEach(a=>a.hidden=!(a.dataset.roles==='*'||(S&&S.role===a.dataset.roles)));
- document.querySelectorAll('[data-guest-only]').forEach(a=>a.hidden=!!S);
+/* MediChannel single-page application.
+ *
+ * The UI is a static HTML document; this file owns routing, data loading
+ * and every dynamic DOM update. All remote data is rendered with
+ * createElement/textContent so that a malicious value can never become
+ * markup.
+ */
+(function () {
+  "use strict";
 
- document.querySelectorAll('[data-home-dashboard]').forEach(a=>{a.hidden=!(S&&HOME[S.role]);if(S&&HOME[S.role])a.href='#'+HOME[S.role]});
-}
-function go(){
- const hash=location.hash.slice(1);let id=hash||'welcome';let requestedPanel='';
- if(!views.some(x=>x.dataset.view===id)){const panel=document.getElementById(id);const owner=panel&&panel.closest('section[data-view]');if(owner&&owner.contains(panel)){requestedPanel=id;id=owner.dataset.view}}
- if(ACL[id]&&(!S||S.role!==ACL[id]))return nav(S?HOME[S.role]:'login');
- if(S&&AUTH.includes(id))return nav(HOME[S.role]);
- const v=views.find(x=>x.dataset.view===id)||views[0];
- initPanels(v,requestedPanel);views.forEach(x=>x.hidden=x!==v);document.title=L(v.dataset.title)+' · MediChannel';
- document.querySelector('footer').hidden=['login','register'].includes(v.dataset.view);
- if(v.dataset.view==='login'&&flash){const o=$('login-ok');o.textContent=flash;o.hidden=false;flash=''}
- scrollTo(0,0);const current=v.querySelector('nav [aria-current]');if(current){const bar=current.closest('nav');bar.scrollLeft=Math.max(0,current.offsetLeft-(bar.clientWidth-current.offsetWidth)/2)}
- if(['welcome','index','appointments'].includes(v.dataset.view)&&S&&S.role==='CUSTOMER')void refreshQueue();else hideQueue();
-}
-function login(u){if(!u||!HOME[u.role])return;S={role:u.role,name:u.name||'Signed in'};setAppMessage('');render();nav('welcome')}
-const V={
- name:v=>v.trim().length<3&&'Please enter your full name.',
- nic:v=>!/^(\d{9}[VvXx]|\d{12})$/.test(v.trim())&&'That NIC doesn’t look right. Use 9 digits + V/X, or 12 digits.',
- dob:v=>(!v||new Date(v)>new Date()||new Date(v)<new Date('1900-01-01'))&&'Please choose your date of birth.',
- phone:v=>!/^07\d{8}$/.test(v.trim())&&'Please enter your phone number like 07XXXXXXXX.',
- email:v=>!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())&&'Please enter a valid email address.',
- addr:v=>v.trim().length<5&&'Please enter your address.',
- pw:v=>!(v.length>=12&&/[A-Za-z]/.test(v)&&/\d/.test(v)&&/[^A-Za-z0-9]/.test(v))&&'Use at least 12 characters, with a letter, a number and a symbol.',
- pw2:(v,f)=>v!==f.elements.password.value&&'The passwords don’t match yet.',
- req:v=>!v&&'Please fill this in.'
+  if ("scrollRestoration" in history) {
+    history.scrollRestoration = "manual";
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const views = Array.from(document.querySelectorAll("[data-view]"));
+  const TZ = "Asia/Colombo";
+
+  const RB = {
+    CUSTOMER: [
+      "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-sky-50 text-blue-700 border-sky-200",
+      "Customer",
+    ],
+    DOCTOR: [
+      "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-teal-50 text-teal-900 border-teal-200",
+      "Doctor",
+    ],
+    MANAGER: [
+      "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-yellow-100 text-yellow-900 border-yellow-200",
+      "Manager",
+    ],
+    ADMIN: [
+      "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-red-100 text-red-900 border-red-200",
+      "Admin",
+    ],
+  };
+
+  const HOME = {
+    CUSTOMER: "appointments",
+    DOCTOR: "doctor",
+    MANAGER: "manager",
+    ADMIN: "admin",
+  };
+
+  const ACL = {
+    appointments: ["CUSTOMER"],
+    consult: ["CUSTOMER", "DOCTOR"],
+    doctor: ["DOCTOR"],
+    manager: ["MANAGER"],
+    admin: ["ADMIN"],
+  };
+
+  const AUTH = ["login", "register"];
+
+  const APPT_STATUS = {
+    BOOKED: ["Booked", "blue"],
+    ARRIVED: ["Checked in", "green"],
+    IN_CONSULTATION: ["In consultation", "sky"],
+    COMPLETED: ["Completed", "green"],
+    CANCELLED: ["Cancelled", "red"],
+    NO_SHOW: ["No-show", "red"],
+  };
+
+  const SESSION_STATUS = {
+    SCHEDULED: ["Scheduled", "slate"],
+    OPEN: ["Open", "blue"],
+    IN_PROGRESS: ["In progress", "green"],
+    COMPLETED: ["Completed", "green"],
+    CANCELLED: ["Cancelled", "red"],
+  };
+
+  const TONE = {
+    blue: "bg-sky-50 text-blue-700 border-sky-200",
+    sky: "bg-sky-50 text-blue-700 border-sky-200",
+    green: "bg-green-50 text-green-800 border-green-200",
+    red: "bg-red-100 text-red-900 border-red-200",
+    orange: "bg-orange-50 text-orange-800 border-orange-200",
+    slate: "bg-slate-100 text-slate-700 border-slate-200",
+  };
+
+  const MAX_CHAT_LENGTH = 1000;
+  const MAX_REASON_LENGTH = 500;
+  const INTENT_KEY = "mc-booking-intent";
+
+  let S = null;
+  let flash = "";
+  let wakePromise = null;
+  let bootTimer = null;
+  let activeView = null;
+  let languageButton = null;
+
+  const state = {
+    specialisationsLoaded: false,
+    sessionsLoaded: false,
+    sessionsLoading: false,
+    sessions: [],
+    selectedSession: null,
+    booking: null,
+    appointments: [],
+    appointmentsLoaded: false,
+    pendingIntent: null,
+    doctor: {
+      sessions: [],
+      sessionsLoaded: false,
+      sessionId: null,
+      queue: null,
+      selected: null,
+      summary: null,
+      queueTimer: null,
+    },
+    consult: {
+      appointmentId: null,
+      requestedId: null,
+      appointment: null,
+      summary: null,
+      typingTimer: null,
+      typingSentAt: 0,
+      typingStopTimer: null,
+      remoteTypingTimer: null,
+      chatSub: null,
+      typingSub: null,
+      statusSub: null,
+    },
+    queueSub: null,
+    sessionsSub: null,
+  };
+
+  // ---------------------------------------------------------------
+  // Formatting helpers
+  // ---------------------------------------------------------------
+
+  function todayISO() {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(
+      new Date()
+    );
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    const date = new Date(String(value) + "T00:00:00");
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: TZ,
+    }).format(date);
+  }
+
+  function formatTime(value) {
+    if (!value) return "—";
+    return String(value).slice(0, 5);
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "—";
+    if (typeof value === "string" && value.length >= 16) {
+      return (
+        formatDate(value.slice(0, 10)) + " " + value.slice(11, 16)
+      );
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: TZ,
+    }).format(date);
+  }
+
+  function money(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return "—";
+    return "LKR " + amount.toLocaleString("en-LK", {
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function referenceOf(value) {
+    if (!value) return "—";
+    return String(value).replace(/-/g, "").slice(0, 10).toUpperCase();
+  }
+
+  function titleCase(value) {
+    return String(value || "")
+      .replaceAll("_", " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function doctorName(session) {
+    const name = String(session && session.doctorName ? session.doctorName : "").trim();
+    if (!name) return "Doctor";
+    return /^dr\.?\s/i.test(name) ? name : "Dr. " + name;
+  }
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
+  }
+
+  function badge(label, tone) {
+    return el(
+      "span",
+      "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap " +
+        (TONE[tone] || TONE.slate),
+      label
+    );
+  }
+
+  function appointmentBadge(status) {
+    const entry = APPT_STATUS[status] || [titleCase(status) || "Unknown", "slate"];
+    return badge(entry[0], entry[1]);
+  }
+
+  function setStatus(node, message, isError) {
+    if (!node) return;
+    node.textContent = message || "";
+    node.hidden = !message;
+    node.classList.toggle("text-bad", Boolean(isError));
+    node.classList.toggle("text-slate2", !isError);
+  }
+
+  function preserveScroll(mutation) {
+    const y = window.scrollY;
+    mutation();
+    requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - y) > 0) window.scrollTo(0, y);
+    });
+  }
+
+  function sessionStart(session) {
+    if (!session || !session.sessionDate) return null;
+    const date = new Date(
+      session.sessionDate + "T" + (session.startTime || "00:00") + ":00"
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function bookingDeadline(session) {
+    const start = sessionStart(session);
+    if (!start) return null;
+    const minutes = session.consultationType === "PHYSICAL" ? 60 : 30;
+    return new Date(start.getTime() - minutes * 60000);
+  }
+
+  function bookingClosed(session) {
+    const deadline = bookingDeadline(session);
+    return deadline ? Date.now() >= deadline.getTime() : false;
+  }
+
+  // ---------------------------------------------------------------
+  // Global messages, wake-up handling
+  // ---------------------------------------------------------------
+
+  function setAppMessage(message) {
+    const notice = $("app-session-warning");
+    if (!notice) return;
+    notice.textContent = message || "";
+    notice.hidden = !message;
+  }
+
+  function setWakeMessage(message) {
+    const status = $("backend-wake-status");
+    if (!status) return;
+    const label = status.querySelector("[data-wake-message]");
+    if (label) label.textContent = message || "";
+    status.hidden = !message;
+  }
+
+  function wakeBackend() {
+    if (wakePromise) return wakePromise;
+
+    wakePromise = (async () => {
+      const delays = [3000, 6000, 10000, 15000, 20000];
+
+      for (let attempt = 0; attempt <= delays.length; attempt++) {
+        const slow = setTimeout(
+          () => setWakeMessage("Connecting to the hospital service…"),
+          2200
+        );
+
+        try {
+          const response = await fetch("/api/backend/wake", {
+            credentials: "same-origin",
+            cache: "no-store",
+          });
+
+          if (response.ok) {
+            setWakeMessage("");
+            return true;
+          }
+        } catch {
+          // Retry below.
+        } finally {
+          clearTimeout(slow);
+        }
+
+        setWakeMessage(
+          attempt < 2
+            ? "The hospital service is starting…"
+            : "The hospital service is still starting. Thanks for waiting…"
+        );
+
+        if (attempt < delays.length) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, delays[attempt])
+          );
+        }
+      }
+
+      setWakeMessage("The backend is still starting. Retry in a moment.");
+      return false;
+    })().finally(() => {
+      wakePromise = null;
+    });
+
+    return wakePromise;
+  }
+
+  // ---------------------------------------------------------------
+  // Routing and panels
+  // ---------------------------------------------------------------
+
+  function parseHash() {
+    const raw = decodeURIComponent(location.hash.slice(1));
+    let id = raw || "welcome";
+    let panel = "";
+    let consultId = null;
+
+    if (id.startsWith("consult-") && id.length > 8) {
+      consultId = id.slice(8);
+      id = "consult";
+    }
+
+    const candidate = document.getElementById(id);
+
+    if (
+      candidate &&
+      candidate.matches("[data-dashboard-panel]") &&
+      candidate.closest("section[data-view]")
+    ) {
+      panel = id;
+      id = candidate.closest("section[data-view]").dataset.view;
+    }
+
+    return { id, panel, consultId };
+  }
+
+  function resolveView(target) {
+    let id = target.id;
+
+    if (!views.some((view) => view.dataset.view === id)) id = "welcome";
+
+    const allowed = ACL[id];
+
+    if (allowed && !(S && allowed.includes(S.role))) {
+      return {
+        id: S ? HOME[S.role] || "welcome" : "login",
+        panel: "",
+        consultId: null,
+      };
+    }
+
+    if (S && AUTH.includes(id)) {
+      return { id: HOME[S.role] || "welcome", panel: "", consultId: null };
+    }
+
+    return { id, panel: target.panel, consultId: target.consultId };
+  }
+
+  function setPanel(view, panelId) {
+    if (!view || !panelId) return false;
+
+    const target = document.getElementById(panelId);
+
+    if (
+      !target ||
+      !view.contains(target) ||
+      !target.matches("[data-dashboard-panel]")
+    ) {
+      return false;
+    }
+
+    const y = window.scrollY;
+
+    view.querySelectorAll("[data-dashboard-panel]").forEach((panel) => {
+      panel.hidden = panel !== target;
+    });
+
+    view.querySelectorAll("[data-panel-link]").forEach((link) => {
+      if (link.getAttribute("href") === "#" + panelId) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    });
+
+    requestAnimationFrame(() => window.scrollTo(0, y));
+    return true;
+  }
+
+  function activatePanel(view, link) {
+    if (!view || !link) return;
+    if (!setPanel(view, link.hash.slice(1))) return;
+
+    try {
+      history.replaceState(null, "", link.hash);
+    } catch {
+      // Ignore history failures (for example in private modes).
+    }
+  }
+
+  function initPanels(view, requestedPanel) {
+    if (!view) return;
+
+    const panels = Array.from(
+      view.querySelectorAll("[data-dashboard-panel]")
+    );
+
+    if (!panels.length) return;
+
+    const currentLink = view.querySelector(
+      '[data-panel-link][aria-current="page"]'
+    );
+
+    const currentPanel = currentLink
+      ? panels.find(
+          (panel) => "#" + panel.id === currentLink.getAttribute("href")
+        )
+      : null;
+
+    const active =
+      (requestedPanel && panels.find((panel) => panel.id === requestedPanel)) ||
+      currentPanel ||
+      panels[0];
+
+    panels.forEach((panel) => {
+      panel.hidden = panel !== active;
+    });
+
+    view.querySelectorAll("[data-panel-link]").forEach((link) => {
+      if (link.getAttribute("href") === "#" + active.id) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    });
+  }
+
+  function showView(id, panel, options) {
+    const settings = options || {};
+    const view = views.find((item) => item.dataset.view === id) || views[0];
+    if (!view) return;
+
+    const targetId = view.dataset.view;
+    const changed = activeView !== targetId;
+
+    if (changed) {
+      views.forEach((item) => {
+        item.hidden = item !== view;
+      });
+
+      activeView = targetId;
+
+      initPanels(view, panel);
+
+      document.title = L(view.dataset.title) + " · MediChannel";
+
+      const footer = document.querySelector("footer");
+      if (footer) {
+        footer.hidden = ["login", "register"].includes(targetId);
+      }
+
+      if (targetId === "login" && flash) {
+        const success = $("login-ok");
+        if (success) {
+          success.textContent = flash;
+          success.hidden = false;
+        }
+        flash = "";
+      }
+
+      window.scrollTo(0, 0);
+    } else if (panel) {
+      setPanel(view, panel);
+    }
+
+    if (changed || settings.force) {
+      enterView(targetId);
+    }
+  }
+
+  function go(options) {
+    const settings = options || {};
+    const target = resolveView(parseHash());
+    showView(target.id, target.panel, settings);
+
+    if (target.consultId) {
+      state.consult.requestedId = target.consultId;
+    }
+  }
+
+  function nav(id) {
+    if (location.hash === "#" + id) {
+      go({ force: true });
+      return;
+    }
+    location.hash = id;
+  }
+
+  function enterView(id) {
+    if (id === "index") {
+      void prepareSearch();
+      return;
+    }
+
+    if (id === "appointments") {
+      void loadAppointments();
+    } else if (id === "doctor") {
+      void loadDoctorConsole();
+    } else if (id === "consult") {
+      void loadConsultationPicker();
+    }
+
+    if (["welcome", "index", "appointments"].includes(id)) {
+      if (S && S.role === "CUSTOMER") {
+        void refreshPatientQueue();
+      } else {
+        hideQueue();
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Account rendering
+  // ---------------------------------------------------------------
+
+  function render() {
+    document.querySelectorAll("[data-who]").forEach((container) => {
+      container.replaceChildren();
+
+      if (S && RB[S.role]) {
+        container.append(badge(RB[S.role][1], {
+          CUSTOMER: "blue",
+          DOCTOR: "green",
+          MANAGER: "orange",
+          ADMIN: "red",
+        }[S.role]));
+
+        const name = el(
+          "span",
+          "hidden max-w-[14rem] truncate sm:inline",
+          S.email || "Signed in"
+        );
+        name.title = S.email || "";
+        container.append(name);
+
+        const out = el(
+          "button",
+          "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+          "Log out"
+        );
+        out.type = "button";
+        out.dataset.out = "";
+        container.append(out);
+        return;
+      }
+
+      const loginLink = el(
+        "a",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+        "Log in"
+      );
+      loginLink.href = "#login";
+
+      const registerLink = el(
+        "a",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold bg-peach border-peach text-white hover:bg-peach-d min-h-9 sm:min-h-8 px-2.5 py-1 text-xs",
+        "Register"
+      );
+      registerLink.href = "#register";
+
+      container.append(loginLink, registerLink);
+    });
+
+    document.querySelectorAll("[data-roles]").forEach((link) => {
+      const roles = String(link.dataset.roles || "*").split(/\s+/);
+      link.hidden = !(
+        roles.includes("*") ||
+        (S && roles.includes(S.role))
+      );
+    });
+
+    document.querySelectorAll("[data-guest-only]").forEach((item) => {
+      item.hidden = Boolean(S);
+    });
+
+    document.querySelectorAll("[data-home-dashboard]").forEach((link) => {
+      const home = S ? HOME[S.role] : null;
+      link.hidden = !home;
+      if (home) link.href = "#" + home;
+    });
+  }
+
+  function setSession(user) {
+    if (!user || !HOME[user.role]) {
+      S = null;
+      return;
+    }
+
+    S = {
+      id: user.id || user.userId || null,
+      role: user.role,
+      email: user.email || "Signed in",
+      name: user.email || "Signed in",
+    };
+  }
+
+  function handleSessionExpired() {
+    S = null;
+    disconnectRealtime();
+    render();
+    hideQueue();
+    setAppMessage("Your session expired. Please sign in again.");
+    nav("login");
+  }
+
+  // ---------------------------------------------------------------
+  // Booking intent (login gate with return)
+  // ---------------------------------------------------------------
+
+  function saveIntent(session, reason) {
+    const intent = {
+      sessionId: session && session.sessionId,
+      session: session || null,
+      reason: reason || "",
+    };
+
+    state.pendingIntent = intent;
+
+    try {
+      sessionStorage.setItem(INTENT_KEY, JSON.stringify(intent));
+    } catch {
+      // The in-memory copy still works for this page.
+    }
+  }
+
+  function readIntent() {
+    if (state.pendingIntent) return state.pendingIntent;
+
+    try {
+      const raw = sessionStorage.getItem(INTENT_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function clearIntent() {
+    state.pendingIntent = null;
+    try {
+      sessionStorage.removeItem(INTENT_KEY);
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function applyIntent() {
+    const intent = readIntent();
+    if (!intent || !S || S.role !== "CUSTOMER") return;
+
+    const session =
+      (intent.sessionId &&
+        state.sessions.find((item) => item.sessionId === intent.sessionId)) ||
+      intent.session;
+
+    if (session) {
+      selectSession(session, { reason: intent.reason });
+    }
+
+    clearIntent();
+  }
+
+  // ---------------------------------------------------------------
+  // Session search
+  // ---------------------------------------------------------------
+
+  async function loadSpecialisations() {
+    const select = $("index-sp");
+    if (!select || state.specialisationsLoaded) return;
+
+    try {
+      const list = await MC.specialisations();
+      if (!Array.isArray(list)) throw new Error("Unexpected response");
+
+      const current = select.value;
+      select.replaceChildren(el("option", "", "All specialisations"));
+      select.firstChild.value = "";
+
+      list.forEach((item) => {
+        const option = el("option", "", item.name);
+        option.value = item.id;
+        select.append(option);
+      });
+
+      if (current) select.value = current;
+      state.specialisationsLoaded = true;
+    } catch {
+      // Search still works without the filter.
+    }
+  }
+
+  async function prepareSearch() {
+    const dateInput = $("index-dt");
+    if (dateInput && !dateInput.value) dateInput.value = todayISO();
+
+    await loadSpecialisations();
+
+    if (S) subscribeSessionsCatalogue();
+
+    if (!state.sessionsLoaded && !state.sessionsLoading) {
+      await loadSessions();
+    } else {
+      renderSessions();
+    }
+
+    applyIntent();
+  }
+
+  function currentFilters() {
+    const q = $("index-q");
+    const specialisation = $("index-sp");
+    const date = $("index-dt");
+    const type = $("index-ty");
+
+    return {
+      q: q ? q.value.trim() : "",
+      specialisationId: specialisation ? specialisation.value : "",
+      date: date ? date.value : "",
+      consultationType: type ? type.value : "",
+    };
+  }
+
+  async function loadSessions() {
+    if (state.sessionsLoading) return;
+
+    const status = document.querySelector("[data-session-status]");
+    const list = document.querySelector("[data-session-list]");
+    const heading = document.querySelector("[data-session-heading]");
+    const filters = currentFilters();
+
+    state.sessionsLoading = true;
+
+    if (status) {
+      status.hidden = false;
+      status.textContent = "Loading available sessions…";
+      status.classList.remove("text-bad");
+    }
+
+    if (list) list.replaceChildren();
+
+    try {
+      const sessions = await MC.sessions(filters);
+      if (!Array.isArray(sessions)) throw new Error("Unexpected response");
+
+      state.sessions = sessions;
+      state.sessionsLoaded = true;
+
+      if (heading) {
+        const day = filters.date ? formatDate(filters.date) : "all dates";
+        heading.textContent =
+          sessions.length +
+          (sessions.length === 1 ? " session on " : " sessions on ") +
+          day;
+      }
+
+      if (status) {
+        status.hidden = sessions.length > 0;
+        status.textContent =
+          sessions.length === 0
+            ? "No sessions match these filters. Try another doctor, specialisation or date."
+            : "";
+      }
+
+      renderSessions();
+    } catch (error) {
+      state.sessionsLoaded = false;
+      if (heading) heading.textContent = "Sessions unavailable";
+      if (status) {
+        status.hidden = false;
+        status.classList.add("text-bad");
+        status.textContent = error.message;
+      }
+      if (list) list.replaceChildren();
+    } finally {
+      state.sessionsLoading = false;
+    }
+  }
+
+  function renderSessions() {
+    const list = document.querySelector("[data-session-list]");
+    if (!list) return;
+
+    list.replaceChildren();
+
+    if (!state.sessions.length) return;
+
+    state.sessions.forEach((session) => {
+      list.append(renderSessionCard(session));
+    });
+  }
+
+  function renderSessionCard(session) {
+    const card = el(
+      "article",
+      "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm [&>h2]:mb-3 grid gap-4"
+    );
+
+    const header = el(
+      "div",
+      "flex flex-wrap items-center gap-3 justify-between"
+    );
+    const names = el("div");
+    names.append(el("h2", "", doctorName(session)));
+    names.append(
+      el(
+        "p",
+        "text-mute",
+        [
+          session.specialisation || "General",
+          session.roomNumber
+            ? "Room " + session.roomNumber
+            : "Video-free chat room",
+        ].join(" · ")
+      )
+    );
+    header.append(
+      names,
+      badge(
+        session.consultationType === "ONLINE" ? "Online" : "Physical",
+        "blue"
+      )
+    );
+
+    const meta = el("div", "flex flex-wrap items-center gap-3");
+    meta.append(
+      el(
+        "span",
+        "",
+        formatTime(session.startTime) + "–" + formatTime(session.endTime)
+      ),
+      el("span", "", formatDate(session.sessionDate)),
+      el("b", "", money(session.feeLkr))
+    );
+
+    const remaining = Math.max(0, Number(session.remainingAppointments) || 0);
+    const capacity = Math.max(1, Number(session.maxAppointments) || 1);
+    const percent = Math.round((remaining / capacity) * 100);
+
+    const capacityWrap = el("div");
+    const capacityLabels = el(
+      "div",
+      "flex flex-wrap items-center gap-3 justify-between text-xs"
+    );
+    capacityLabels.append(
+      el("span", "live", "Spots left (live)"),
+      el("b", "", remaining + " of " + capacity)
+    );
+
+    const bar = el("div", remaining === 0 ? "bar w" : "bar");
+    const fill = el("i");
+    fill.style.width = percent + "%";
+    bar.append(fill);
+    capacityWrap.append(capacityLabels, bar);
+
+    const footer = el(
+      "div",
+      "flex flex-wrap items-center gap-3 justify-between"
+    );
+    const deadline = bookingDeadline(session);
+    const closed = bookingClosed(session);
+    const full = remaining <= 0;
+
+    footer.append(
+      el(
+        "span",
+        "text-xs text-mute",
+        full
+          ? "Session full"
+          : closed
+            ? "Booking closed for this session"
+            : "Booking closes " +
+              (deadline
+                ? deadline.toLocaleTimeString("en-GB", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: TZ,
+                  }) +
+                  " (" +
+                  (session.consultationType === "PHYSICAL" ? "1 h" : "30 min") +
+                  " before)"
+                : "before the session")
+      )
+    );
+
+    const book = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed bg-peach border-peach text-white hover:bg-peach-d min-h-10 px-3.5 py-2",
+      full ? "No spots left" : closed ? "Booking closed" : "Book"
+    );
+    book.type = "button";
+    book.dataset.bookSession = session.sessionId;
+    book.disabled = full || closed;
+    footer.append(book);
+
+    card.append(header, meta, capacityWrap, footer);
+    return card;
+  }
+
+  function selectSession(session, options) {
+    if (!session) return;
+
+    const settings = options || {};
+    state.selectedSession = session;
+    state.booking = null;
+
+    const title = document.querySelector("[data-booking-title]");
+    const meta = document.querySelector("[data-booking-meta]");
+    const form = document.querySelector("[data-booking-form]");
+    const success = document.querySelector("[data-booking-success]");
+    const note = document.querySelector("[data-booking-note]");
+    const reason = $("index-rs");
+    const error = document.querySelector("[data-booking-error]");
+
+    if (title) title.textContent = "Book: " + doctorName(session);
+    if (meta) {
+      meta.textContent = [
+        formatDate(session.sessionDate),
+        formatTime(session.startTime),
+        session.consultationType === "ONLINE" ? "Online" : "Physical",
+        session.roomNumber ? "Room " + session.roomNumber : "Chat room",
+        money(session.feeLkr),
+      ].join(" · ");
+    }
+
+    if (form) form.hidden = false;
+    if (success) success.hidden = true;
+    if (error) {
+      error.hidden = true;
+      error.textContent = "";
+    }
+
+    if (note) {
+      note.textContent =
+        S && S.role === "CUSTOMER"
+          ? "Your queue number is allocated as soon as you confirm."
+          : S
+            ? "Only patient accounts can book appointments."
+            : "You will be asked to log in, then returned to this booking.";
+    }
+
+    if (reason && settings.reason) reason.value = settings.reason;
+
+    const confirm = document.querySelector("[data-booking-confirm]");
+    if (confirm) {
+      confirm.disabled = Boolean(S && S.role !== "CUSTOMER");
+    }
+
+    const panel = document.querySelector('[aria-label="Book session"]');
+    if (panel && panel.scrollIntoView) {
+      panel.scrollIntoView({ block: "nearest" });
+    }
+
+    if (reason) reason.focus({ preventScroll: true });
+  }
+
+  async function confirmBooking() {
+    const session = state.selectedSession;
+    const error = document.querySelector("[data-booking-error]");
+    const reasonInput = $("index-rs");
+    const button = document.querySelector("[data-booking-confirm]");
+
+    if (!session) return;
+
+    const reason = reasonInput ? reasonInput.value.trim() : "";
+
+    if (reason.length < 5) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = "Please tell us a little about why you’re visiting.";
+      }
+      return;
+    }
+
+    if (reason.length > MAX_REASON_LENGTH) {
+      if (error) {
+        error.hidden = false;
+        error.textContent =
+          "Please keep the reason under " + MAX_REASON_LENGTH + " characters.";
+      }
+      return;
+    }
+
+    if (!S) {
+      saveIntent(session, reason);
+      nav("login");
+      return;
+    }
+
+    if (S.role !== "CUSTOMER") {
+      if (error) {
+        error.hidden = false;
+        error.textContent = "Only patient accounts can book appointments.";
+      }
+      return;
+    }
+
+    if (button) button.disabled = true;
+
+    try {
+      const appointment = await MC.bookAppointment(
+        session.sessionId,
+        reason
+      );
+
+      state.booking = appointment;
+      showBookingSuccess(appointment, session);
+      clearIntent();
+      await Promise.allSettled([
+        loadAppointments(),
+        loadSessions(),
+      ]);
+    } catch (problem) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = problem.message;
+      }
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function showBookingSuccess(appointment, session) {
+    const form = document.querySelector("[data-booking-form]");
+    const success = document.querySelector("[data-booking-success]");
+    const reference = document.querySelector("[data-booking-reference]");
+    const number = document.querySelector("[data-booking-number]");
+    const estimate = document.querySelector("[data-booking-estimate]");
+    const message = document.querySelector("[data-booking-message]");
+    const pay = document.querySelector("[data-booking-pay]");
+
+    if (form) form.hidden = true;
+    if (success) success.hidden = false;
+    if (reference) reference.textContent = referenceOf(appointment.bookingReference);
+    if (number) number.textContent = "#" + appointment.appointmentNumber;
+    if (estimate) {
+      estimate.textContent = appointment.estimatedConsultationTime
+        ? formatDateTime(appointment.estimatedConsultationTime)
+        : session
+          ? formatTime(session.startTime)
+          : "—";
+    }
+
+    if (message) {
+      message.textContent =
+        appointment.paymentStatus === "PAID"
+          ? "Your payment is recorded. The doctor can start your consultation when you check in."
+          : "Pay now so the doctor can start your consultation when you check in.";
+    }
+
+    if (pay) {
+      pay.dataset.bookingPay = appointment.appointmentId;
+      pay.hidden = appointment.paymentStatus === "PAID";
+    }
+
+    const goButton = document.querySelector("[data-booking-goto]");
+    if (goButton) goButton.dataset.bookingGoto = "1";
+  }
+
+  async function payBooking(appointmentId) {
+    const pay = document.querySelector("[data-booking-pay]");
+    const message = document.querySelector("[data-booking-message]");
+
+    if (pay) pay.disabled = true;
+
+    try {
+      await MC.pay(appointmentId, "CARD");
+      if (message) message.textContent = "Paid by card. You’re ready when the doctor calls you.";
+      if (pay) pay.hidden = true;
+      await Promise.allSettled([loadAppointments(), refreshPatientQueue()]);
+    } catch (error) {
+      if (message) message.textContent = error.message;
+      if (pay) pay.disabled = false;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Patient appointments and queue
+  // ---------------------------------------------------------------
+
+  function hideQueue() {
+    document.querySelectorAll("[data-patient-queue-card]").forEach((card) => {
+      card.hidden = true;
+    });
+  }
+
+  function activeAppointment(list) {
+    const today = todayISO();
+
+    return (list || [])
+      .filter(
+        (item) =>
+          item &&
+          item.sessionDate === today &&
+          item.appointmentNumber &&
+          ["BOOKED", "ARRIVED", "IN_CONSULTATION"].includes(item.status)
+      )
+      .sort((a, b) =>
+        String(a.sessionStartTime || "").localeCompare(
+          String(b.sessionStartTime || "")
+        )
+      )[0];
+  }
+
+  async function loadAppointments() {
+    if (!S || S.role !== "CUSTOMER") {
+      hideQueue();
+      return;
+    }
+
+    const status = document.querySelector("[data-appointments-status]");
+    const tbody = document.querySelector("[data-appointments-list]");
+    const empty = document.querySelector("[data-appointments-empty]");
+
+    if (status) {
+      status.hidden = false;
+      status.textContent = "Loading your appointments…";
+      status.classList.remove("text-bad");
+    }
+
+    try {
+      const list = await MC.myAppointments();
+      if (!Array.isArray(list)) throw new Error("Unexpected response");
+
+      state.appointments = list;
+      state.appointmentsLoaded = true;
+      renderAppointments(list);
+      if (status) status.hidden = true;
+      if (empty) empty.hidden = list.length > 0;
+      await refreshPatientQueue(list);
+    } catch (error) {
+      if (error.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+
+      if (status) {
+        status.hidden = false;
+        status.classList.add("text-bad");
+        status.textContent = error.message;
+      }
+      if (tbody) tbody.replaceChildren();
+      if (empty) empty.hidden = true;
+      hideQueue();
+    }
+  }
+
+  function renderAppointments(list) {
+    const tbody = document.querySelector("[data-appointments-list]");
+    if (!tbody) return;
+
+    tbody.replaceChildren();
+
+    list.forEach((appointment) => {
+      const row = document.createElement("tr");
+
+      const cells = [
+        [referenceOf(appointment.bookingReference), "Booking ref"],
+        [appointment.doctorName ? doctorName(appointment) : "—", "Doctor"],
+        [
+          [
+            formatDate(appointment.sessionDate),
+            formatTime(appointment.sessionStartTime),
+          ]
+            .filter(Boolean)
+            .join(" "),
+          "When",
+        ],
+        [
+          appointment.consultationType === "ONLINE" ? "Online" : "Physical",
+          "Visit type",
+        ],
+      ];
+
+      cells.forEach(([value, label]) => {
+        const cell = document.createElement("td");
+        cell.dataset.label = label;
+        cell.textContent = String(value);
+        row.append(cell);
+      });
+
+      const statusCell = document.createElement("td");
+      statusCell.dataset.label = "Status";
+      statusCell.append(appointmentBadge(appointment.status));
+      row.append(statusCell);
+
+      const paymentCell = document.createElement("td");
+      paymentCell.dataset.label = "Payment";
+      paymentCell.textContent =
+        appointment.paymentStatus === "PAID"
+          ? "Paid" +
+            (appointment.paymentMethod
+              ? " · " +
+                appointment.paymentMethod.charAt(0) +
+                appointment.paymentMethod.slice(1).toLowerCase()
+              : "")
+          : appointment.paymentStatus === "REFUNDED"
+            ? "Refunded"
+            : "Not paid yet";
+      row.append(paymentCell);
+
+      const actions = document.createElement("td");
+      actions.dataset.label = "Actions";
+      actions.className = "flex flex-wrap items-center justify-end gap-2";
+
+      if (
+        appointment.paymentStatus !== "PAID" &&
+        ["BOOKED", "ARRIVED"].includes(appointment.status)
+      ) {
+        actions.append(
+          actionButton(
+            "Pay " + money(appointment.consultationFeeLkr),
+            "bg-brand border-brand text-white hover:bg-brand-d",
+            "pay-appointment",
+            appointment.appointmentId
+          )
+        );
+      }
+
+      if (appointment.status === "BOOKED" && appointment.paymentStatus === "PAID") {
+        actions.append(
+          actionButton(
+            "Check in",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "checkin-appointment",
+            appointment.appointmentId
+          )
+        );
+      }
+
+      if (
+        appointment.status === "BOOKED" &&
+        appointment.paymentStatus !== "PAID" &&
+        canCancel(appointment)
+      ) {
+        actions.append(
+          actionButton(
+            "Cancel",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "cancel-appointment",
+            appointment.appointmentId
+          )
+        );
+      }
+
+      if (
+        ["IN_CONSULTATION", "COMPLETED"].includes(appointment.status)
+      ) {
+        actions.append(
+          actionButton(
+            appointment.status === "IN_CONSULTATION"
+              ? "Open chat"
+              : "Summary & feedback",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "open-consult",
+            appointment.appointmentId
+          )
+        );
+      }
+
+      if (!actions.childNodes.length) {
+        actions.append(document.createTextNode("—"));
+      }
+
+      row.append(actions);
+      tbody.append(row);
+    });
+  }
+
+  function canCancel(appointment) {
+    if (!appointment.sessionDate) return false;
+    const start = new Date(
+      appointment.sessionDate +
+        "T" +
+        (appointment.sessionStartTime || "00:00") +
+        ":00"
+    );
+    if (Number.isNaN(start.getTime())) return false;
+    return Date.now() < start.getTime() - 3 * 60 * 60 * 1000;
+  }
+
+  function actionButton(label, tone, name, id) {
+    const button = el(
+      "button",
+      "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed min-h-9 sm:min-h-8 px-2.5 py-1 text-xs " +
+        tone,
+      label
+    );
+    button.type = "button";
+    // Firefox rejects hyphenated DOMStringMap keys, and several action
+    // names such as "checkin-appointment" contain a hyphen. Convert
+    // camelCase names the same way dataset would.
+    button.setAttribute(
+      "data-" + name.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase()),
+      id
+    );
+    return button;
+  }
+
+  async function refreshPatientQueue(knownList) {
+    if (!S || S.role !== "CUSTOMER") {
+      hideQueue();
+      return;
+    }
+
+    let list = knownList;
+
+    if (!list) {
+      try {
+        list = state.appointments.length
+          ? state.appointments
+          : await MC.myAppointments();
+        state.appointments = list;
+      } catch (error) {
+        if (error.status === 401) handleSessionExpired();
+        hideQueue();
+        return;
+      }
+    }
+
+    const current = activeAppointment(list);
+
+    if (!current) {
+      hideQueue();
+      unsubscribeQueue();
+      return;
+    }
+
+    let summary = null;
+
+    try {
+      summary = await MC.sessionQueue(current.sessionId);
+    } catch {
+      summary = null;
+    }
+
+    if (!S || S.role !== "CUSTOMER") return;
+
+    const number = current.appointmentNumber;
+
+    document.querySelectorAll("[data-patient-queue-card]").forEach((card) => {
+      card.querySelector("[data-queue-headline]").textContent =
+        "You are number " + number;
+
+      card.querySelector("[data-queue-number]").textContent = String(number);
+
+      const parts = [
+        doctorName(current),
+        formatTime(current.sessionStartTime)
+          ? "today at " + formatTime(current.sessionStartTime)
+          : "",
+        APPT_STATUS[current.status]
+          ? APPT_STATUS[current.status][0]
+          : titleCase(current.status),
+      ].filter(Boolean);
+
+      if (summary && summary.nowServing) {
+        parts.push("Now serving #" + summary.nowServing);
+        const ahead = Math.max(0, number - summary.nowServing);
+        parts.push(
+          ahead === 0 ? "You’re next" : ahead + (ahead === 1 ? " person ahead" : " people ahead")
+        );
+      } else if (current.status === "IN_CONSULTATION") {
+        parts.push("Your consultation is in progress");
+      }
+
+      card.querySelector("[data-queue-details]").textContent =
+        parts.join(" · ");
+
+      card.hidden = false;
+    });
+
+    subscribeQueue(current.sessionId);
+  }
+
+  function subscribeQueue(sessionId) {
+    if (!sessionId) return;
+
+    const destination = "/topic/sessions/" + sessionId + "/queue";
+
+    if (state.queueSub && state.queueSub.destination === destination) return;
+
+    unsubscribeQueue();
+
+    state.queueSub = subscribe(
+      "patient-queue",
+      destination,
+      (payload) => {
+        if (!payload) return;
+
+        const cards = document.querySelectorAll("[data-patient-queue-card]");
+        cards.forEach((card) => {
+          const details = card.querySelector("[data-queue-details]");
+          if (!details) return;
+          if (payload.nowServing) {
+            const current = activeAppointment(state.appointments);
+            const number = current ? current.appointmentNumber : null;
+            const base = details.textContent.split(" · Now serving")[0];
+            details.textContent =
+              base +
+              " · Now serving #" +
+              payload.nowServing +
+              (number
+                ? " · " +
+                  (Math.max(0, number - payload.nowServing) === 0
+                    ? "You’re next"
+                    : Math.max(0, number - payload.nowServing) +
+                      (Math.max(0, number - payload.nowServing) === 1
+                        ? " person ahead"
+                        : " people ahead"))
+                : "");
+          }
+        });
+      }
+    );
+  }
+
+  function unsubscribeQueue() {
+    if (state.queueSub) {
+      unsubscribe("patient-queue");
+      state.queueSub = null;
+    }
+  }
+
+  function subscribeSessionsCatalogue() {
+    if (!S || state.sessionsSub) return;
+
+    state.sessionsSub = subscribe(
+      "sessions-catalogue",
+      "/topic/sessions",
+      (payload) => {
+        if (!payload || !state.sessions.length) return;
+        const session = state.sessions.find(
+          (item) => item.sessionId === payload.sessionId
+        );
+        if (!session) return;
+        session.remainingAppointments = payload.remainingAppointments;
+        session.status = payload.status;
+        preserveScroll(() => renderSessions());
+      }
+    );
+  }
+
+  async function payAppointment(appointmentId, button) {
+    if (!appointmentId) return;
+    if (button) button.disabled = true;
+
+    try {
+      await MC.pay(appointmentId, "CARD");
+      setAppMessage("");
+      await loadAppointments();
+    } catch (error) {
+      setAppMessage(error.message);
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function cancelAppointment(appointmentId) {
+    if (!window.confirm("Cancel this appointment?")) return;
+
+    try {
+      await MC.cancelAppointment(appointmentId);
+      await Promise.allSettled([loadAppointments(), loadSessions()]);
+    } catch (error) {
+      setAppMessage(error.message);
+    }
+  }
+
+  async function checkInAppointment(appointmentId) {
+    try {
+      await MC.checkIn(appointmentId);
+      await loadAppointments();
+    } catch (error) {
+      setAppMessage(error.message);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Real-time transport
+  // ---------------------------------------------------------------
+
+  let stompClient = null;
+  let stompReady = null;
+  let stompConnected = false;
+  const subscriptions = new Map();
+
+  async function getRealtime() {
+    if (!S) throw new Error("Sign in to use live updates.");
+    if (stompReady) return stompReady;
+
+    stompReady = (async () => {
+      const response = await fetch("/api/realtime/config", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const config = await response.json().catch(() => ({}));
+
+      if (!response.ok || !config.websocketUrl) {
+        throw new Error("Live updates are not configured.");
+      }
+
+      if (typeof StompJs === "undefined") {
+        throw new Error("The live update library did not load.");
+      }
+
+      const client = new StompJs.Client({
+        brokerURL: config.websocketUrl,
+        reconnectDelay: 4000,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
+        debug: () => {},
+      });
+
+      client.beforeConnect = async () => {
+        const ticket = await MC.wsTicket();
+        client.connectHeaders = {
+          Authorization: "Bearer " + ticket.ticket,
+        };
+      };
+
+      client.onConnect = () => {
+        stompConnected = true;
+        subscriptions.forEach((entry) => {
+          if (entry.subscription) {
+            try {
+              entry.subscription.unsubscribe();
+            } catch {
+              // Ignore stale subscriptions.
+            }
+          }
+          entry.subscription = client.subscribe(
+            entry.destination,
+            entry.handler
+          );
+        });
+      };
+
+      client.onWebSocketClose = () => {
+        stompConnected = false;
+      };
+
+      client.onStompError = (frame) => {
+        stompConnected = false;
+        const message =
+          (frame.headers && frame.headers.message) ||
+          "Live updates are temporarily unavailable.";
+        setAppMessage(message);
+      };
+
+      stompClient = client;
+      client.activate();
+
+      return client;
+    })().catch((error) => {
+      stompReady = null;
+      throw error;
+    });
+
+    return stompReady;
+  }
+
+  function subscribe(key, destination, handler) {
+    if (subscriptions.has(key)) {
+      const existing = subscriptions.get(key);
+      if (existing.destination === destination) return existing;
+      unsubscribe(key);
+    }
+
+    const entry = {
+      destination,
+      handler: (message) => {
+        let payload = null;
+        try {
+          payload = JSON.parse(message.body);
+        } catch {
+          return;
+        }
+        handler(payload);
+      },
+      subscription: null,
+    };
+
+    subscriptions.set(key, entry);
+
+    if (stompConnected && stompClient) {
+      entry.subscription = stompClient.subscribe(
+        entry.destination,
+        entry.handler
+      );
+    } else {
+      void getRealtime().catch(() => {
+        // The next successful connection registers this handler.
+      });
+    }
+
+    return entry;
+  }
+
+  function unsubscribe(key) {
+    const entry = subscriptions.get(key);
+    if (!entry) return;
+
+    if (entry.subscription) {
+      try {
+        entry.subscription.unsubscribe();
+      } catch {
+        // Ignore.
+      }
+    }
+
+    subscriptions.delete(key);
+  }
+
+  function publish(destination, payload) {
+    if (!stompConnected || !stompClient) {
+      throw new Error("Live updates are not connected yet.");
+    }
+
+    stompClient.publish({
+      destination,
+      body: JSON.stringify(payload),
+    });
+  }
+
+  function disconnectRealtime() {
+    subscriptions.clear();
+    stompConnected = false;
+
+    if (stompClient) {
+      try {
+        void stompClient.deactivate();
+      } catch {
+        // Ignore.
+      }
+    }
+
+    stompClient = null;
+    stompReady = null;
+    state.sessionsSub = null;
+    state.queueSub = null;
+  }
+
+  // ---------------------------------------------------------------
+  // Doctor console
+  // ---------------------------------------------------------------
+
+  async function loadDoctorConsole() {
+    if (!S || S.role !== "DOCTOR") return;
+
+    const select = $("doctor-session-select");
+    const status = document.querySelector("[data-doctor-status]");
+    const empty = document.querySelector("[data-doctor-empty]");
+
+    if (status) setStatus(status, "Loading your sessions…");
+
+    try {
+      let sessions = await MC.doctorSessions(todayISO());
+
+      if (!Array.isArray(sessions)) throw new Error("Unexpected response");
+
+      if (!sessions.length && !state.doctor.sessionsLoaded) {
+        const all = await MC.doctorSessions();
+        sessions = Array.isArray(all) ? all : [];
+      }
+
+      state.doctor.sessions = sessions;
+      state.doctor.sessionsLoaded = true;
+
+      if (select) {
+        select.replaceChildren();
+
+        sessions.forEach((session) => {
+          const option = el(
+            "option",
+            "",
+            formatDate(session.sessionDate) +
+              " · " +
+              formatTime(session.startTime) +
+              "–" +
+              formatTime(session.endTime) +
+              " · " +
+              (session.consultationType === "ONLINE" ? "Online" : "Physical")
+          );
+          option.value = session.sessionId;
+          select.append(option);
+        });
+
+        const keep = sessions.find(
+          (session) => session.sessionId === state.doctor.sessionId
+        );
+
+        select.value = keep ? keep.sessionId : sessions[0] ? sessions[0].sessionId : "";
+      }
+
+      if (!sessions.length) {
+        if (empty) empty.hidden = false;
+        const rows = document.querySelector("[data-doctor-rows]");
+        if (rows) rows.replaceChildren();
+        setStatus(status, "You have no sessions scheduled.");
+        return;
+      }
+
+      if (empty) empty.hidden = true;
+
+      const sessionId = select ? select.value : sessions[0].sessionId;
+      await loadDoctorQueue(sessionId);
+    } catch (error) {
+      if (error.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      setStatus(status, error.message, true);
+    }
+  }
+
+  async function loadDoctorQueue(sessionId, options) {
+    if (!sessionId) return;
+
+    const settings = options || {};
+    const statusNode = document.querySelector("[data-doctor-status]");
+    const rows = document.querySelector("[data-doctor-rows]");
+    const empty = document.querySelector("[data-doctor-empty]");
+
+    if (!settings.silent && statusNode) {
+      setStatus(statusNode, "Loading the queue…");
+    }
+
+    try {
+      const queue = await MC.doctorQueue(sessionId);
+      state.doctor.queue = queue;
+      state.doctor.sessionId = sessionId;
+
+      const session = state.doctor.sessions.find(
+        (item) => item.sessionId === sessionId
+      );
+
+      renderDoctorHeader(session, queue);
+      renderDoctorStats(queue);
+      renderDoctorRows(queue, session);
+
+      if (empty) empty.hidden = true;
+      if (statusNode && !settings.silent) {
+        setStatus(
+          statusNode,
+          queue.appointments.length
+            ? ""
+            : "No patients have booked this session yet."
+        );
+      }
+
+      subscribe(
+        "doctor-queue",
+        "/topic/sessions/" + sessionId + "/queue",
+        () => {
+          if (state.doctor.queueTimer) return;
+          state.doctor.queueTimer = setTimeout(() => {
+            state.doctor.queueTimer = null;
+            if (state.doctor.sessionId === sessionId) {
+              void loadDoctorQueue(sessionId, { silent: true });
+            }
+          }, 350);
+        }
+      );
+    } catch (error) {
+      if (error.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      setStatus(statusNode, error.message, true);
+      if (rows) rows.replaceChildren();
+      if (empty) empty.hidden = false;
+    }
+  }
+
+  function renderDoctorHeader(session, queue) {
+    const title = document.querySelector("[data-doctor-session-title]");
+    const meta = document.querySelector("[data-doctor-session-meta]");
+    const statusBadge = document.querySelector("[data-doctor-session-status]");
+
+    if (title) {
+      title.textContent = session
+        ? doctorName(session) + " · " + (session.specialisation || "Clinic")
+        : "Today’s sessions";
+    }
+
+    if (meta && session) {
+      meta.textContent =
+        formatDate(session.sessionDate) +
+        " · " +
+        formatTime(session.startTime) +
+        "–" +
+        formatTime(session.endTime) +
+        " · " +
+        (session.consultationType === "ONLINE"
+          ? "Online"
+          : session.roomNumber
+            ? "Room " + session.roomNumber
+            : "Physical") +
+        " · " +
+        session.minutesPerPatient +
+        " min per patient";
+    }
+
+    if (statusBadge) {
+      const entry = SESSION_STATUS[queue.status] || [titleCase(queue.status), "slate"];
+      statusBadge.className =
+        "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap " +
+        (TONE[entry[1]] || TONE.slate);
+      statusBadge.textContent = entry[0];
+    }
+  }
+
+  function renderDoctorStats(queue) {
+    const appointments = queue.appointments || [];
+
+    const set = (selector, value) => {
+      const node = document.querySelector(selector);
+      if (node) node.textContent = value;
+    };
+
+    set("[data-stat-booked]", appointments.length);
+    set(
+      "[data-stat-completed]",
+      appointments.filter((item) => item.status === "COMPLETED").length
+    );
+    set(
+      "[data-stat-now]",
+      queue.nowServing ? "#" + queue.nowServing : "—"
+    );
+    set(
+      "[data-stat-waiting]",
+      appointments.filter((item) => item.status === "ARRIVED").length
+    );
+  }
+
+  function renderDoctorRows(queue, session) {
+    const tbody = document.querySelector("[data-doctor-rows]");
+    if (!tbody) return;
+
+    tbody.replaceChildren();
+
+    (queue.appointments || []).forEach((appointment) => {
+      const row = document.createElement("tr");
+
+      if (appointment.status === "IN_CONSULTATION") {
+        row.className = "[&>td]:bg-sky-50";
+      } else if (["CANCELLED", "NO_SHOW"].includes(appointment.status)) {
+        row.className = "[&>td]:text-mute";
+      }
+
+      const number = document.createElement("td");
+      number.dataset.label = "No.";
+      number.append(el("b", "", "#" + appointment.appointmentNumber));
+      row.append(number);
+
+      const patient = document.createElement("td");
+      patient.dataset.label = "Patient";
+      patient.textContent = appointment.patientName || "Patient";
+      row.append(patient);
+
+      const type = document.createElement("td");
+      type.dataset.label = "Type";
+      type.textContent =
+        appointment.consultationType === "ONLINE" ? "Online" : "Physical";
+      row.append(type);
+
+      const arrival = document.createElement("td");
+      arrival.dataset.label = "Check-in";
+      arrival.textContent = appointment.arrivedAt
+        ? "Checked in " + formatDateTime(appointment.arrivedAt).slice(-5)
+        : "Not arrived";
+      row.append(arrival);
+
+      const status = document.createElement("td");
+      status.dataset.label = "Status";
+      let entry = APPT_STATUS[appointment.status] || [titleCase(appointment.status), "slate"];
+
+      if (
+        appointment.status === "ARRIVED" &&
+        queue.nextNumber &&
+        appointment.appointmentNumber === queue.nextNumber
+      ) {
+        entry = ["Next", "orange"];
+      }
+
+      status.append(badge(entry[0], entry[1]));
+      row.append(status);
+
+      const payment = document.createElement("td");
+      payment.dataset.label = "Payment";
+      if (appointment.paymentStatus === "PAID") {
+        payment.textContent =
+          "Paid" +
+          (appointment.paymentMethod
+            ? " · " + titleCase(appointment.paymentMethod)
+            : "");
+      } else {
+        payment.append(badge("Not paid", "orange"));
+      }
+      row.append(payment);
+
+      const actions = document.createElement("td");
+      actions.dataset.label = "Actions";
+      actions.className = "flex flex-wrap items-center justify-end gap-2";
+
+      if (appointment.status === "BOOKED") {
+        if (appointment.paymentStatus === "PAID") {
+          actions.append(
+            doctorAction(
+              "Mark arrived",
+              "bg-brand border-brand text-white hover:bg-brand-d",
+              "arrive",
+              appointment.appointmentId
+            )
+          );
+        }
+        actions.append(
+          doctorAction(
+            "No-show",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "noshow",
+            appointment.appointmentId
+          )
+        );
+      } else if (appointment.status === "ARRIVED") {
+        if (appointment.paymentStatus === "PAID") {
+          actions.append(
+            doctorAction(
+              "Start",
+              "bg-brand border-brand text-white hover:bg-brand-d",
+              "start",
+              appointment.appointmentId
+            )
+          );
+        } else {
+          actions.append(
+            el(
+              "span",
+              "text-xs font-semibold text-orange-800",
+              "Collect payment first"
+            )
+          );
+        }
+        actions.append(
+          doctorAction(
+            "No-show",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "noshow",
+            appointment.appointmentId
+          )
+        );
+      } else if (appointment.status === "IN_CONSULTATION") {
+        actions.append(
+          doctorAction(
+            "Complete",
+            "bg-brand border-brand text-white hover:bg-brand-d",
+            "complete",
+            appointment.appointmentId
+          ),
+          doctorAction(
+            "Chat",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "chat",
+            appointment.appointmentId
+          )
+        );
+      } else if (appointment.status === "COMPLETED") {
+        actions.append(
+          doctorAction(
+            "Notes",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "notes",
+            appointment.appointmentId
+          ),
+          doctorAction(
+            "Chat",
+            "bg-white border-line text-slate2 hover:bg-snow",
+            "chat",
+            appointment.appointmentId
+          )
+        );
+      }
+
+      if (!actions.childNodes.length) {
+        actions.append(document.createTextNode("—"));
+      }
+
+      row.append(actions);
+      tbody.append(row);
+    });
+  }
+
+  function doctorAction(label, tone, name, id) {
+    // data-doctor-action carries the action name; data-doctor-id keeps the
+    // appointment id so the click handler can pass both to runDoctorAction().
+    const button = actionButton(label, tone, "doctorAction", name);
+    button.dataset.doctorId = id;
+    return button;
+  }
+
+  async function runDoctorAction(name, appointmentId, button) {
+    if (button) button.disabled = true;
+
+    const statusNode = document.querySelector("[data-doctor-status]");
+
+    try {
+      if (name === "arrive") {
+        await MC.markArrived(appointmentId);
+        setStatus(statusNode, "Patient marked as arrived.");
+      } else if (name === "start") {
+        await MC.startConsultation(appointmentId);
+        setStatus(statusNode, "Consultation started.");
+      } else if (name === "complete") {
+        const result = await MC.completeAndAdvance(appointmentId);
+
+        if (result.paymentRequired) {
+          setStatus(
+            statusNode,
+            "Consultation completed. The next patient has not paid yet — collect payment before starting.",
+            true
+          );
+        } else if (result.next) {
+          setStatus(
+            statusNode,
+            "Consultation completed. Now serving #" +
+              result.next.appointmentNumber +
+              "."
+          );
+        } else {
+          setStatus(
+            statusNode,
+            "Consultation completed. Waiting for the next check-in."
+          );
+        }
+
+        selectNotes(result.completed);
+      } else if (name === "noshow") {
+        await MC.markNoShow(appointmentId);
+        setStatus(statusNode, "Appointment marked as a no-show.");
+      } else if (name === "notes" || name === "chat") {
+        if (name === "chat") {
+          state.consult.requestedId = appointmentId;
+          nav("consult");
+          return;
+        }
+        const queue = state.doctor.queue;
+        const appointment = queue
+          ? queue.appointments.find(
+              (item) => item.appointmentId === appointmentId
+            )
+          : null;
+        if (appointment) await selectNotes(appointment);
+        return;
+      }
+
+      await loadDoctorQueue(state.doctor.sessionId, { silent: true });
+    } catch (error) {
+      setStatus(statusNode, error.message, true);
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function selectNotes(appointment) {
+    if (!appointment) return;
+
+    state.doctor.selected = appointment;
+    state.doctor.summary = null;
+
+    const title = document.querySelector("[data-notes-title]");
+    const reason = document.querySelector("[data-notes-reason]");
+    const status = document.querySelector("[data-notes-status]");
+    const dx = $("doctor-dx");
+    const rx = $("doctor-rx");
+    const fu = $("doctor-fu");
+    const save = document.querySelector("[data-save-summary]");
+
+    const name =
+      appointment.patientName || "Patient";
+    const number = appointment.appointmentNumber
+      ? "#" + appointment.appointmentNumber + " · "
+      : "";
+
+    if (title) title.textContent = number + name;
+    if (reason) {
+      reason.textContent =
+        "Status: " +
+        (APPT_STATUS[appointment.status]
+          ? APPT_STATUS[appointment.status][0]
+          : titleCase(appointment.status)) +
+        " · Payment: " +
+        (appointment.paymentStatus === "PAID" ? "Paid" : "Not paid");
+    }
+
+    if (dx) dx.value = "";
+    if (rx) rx.value = "";
+    if (fu) fu.value = "";
+
+    const completed = appointment.status === "COMPLETED";
+
+    if (save) {
+      save.disabled = !completed;
+      save.textContent = completed ? "Save notes" : "Complete the consultation first";
+    }
+
+    setStatus(
+      status,
+      completed
+        ? "Add the diagnosis and prescription, then save."
+        : "The summary can be saved after you complete the consultation."
+    );
+
+    if (!completed) return;
+
+    try {
+      const summary = await MC.summary(appointment.appointmentId);
+      if (!summary) return;
+
+      state.doctor.summary = summary;
+
+      if (dx) dx.value = summary.diagnosis || "";
+      if (rx) rx.value = summary.prescription || summary.treatmentNotes || "";
+      if (fu) fu.value = summary.followUpInstructions || "";
+
+      setStatus(status, "Summary loaded. Saving updates the existing record.");
+    } catch (error) {
+      if (error.status !== 404) setStatus(status, error.message, true);
+    }
+  }
+
+  async function saveDoctorSummary() {
+    const appointment = state.doctor.selected;
+    const status = document.querySelector("[data-notes-status]");
+    const save = document.querySelector("[data-save-summary]");
+    const dx = $("doctor-dx");
+    const rx = $("doctor-rx");
+    const fu = $("doctor-fu");
+
+    if (!appointment) return;
+
+    if (appointment.status !== "COMPLETED") {
+      setStatus(
+        status,
+        "Complete the consultation before saving the summary.",
+        true
+      );
+      return;
+    }
+
+    const diagnosis = dx ? dx.value.trim() : "";
+
+    if (!diagnosis) {
+      setStatus(status, "Diagnosis is required before saving.", true);
+      return;
+    }
+
+    if (save) save.disabled = true;
+
+    try {
+      const summary = await MC.saveSummary(
+        appointment.appointmentId,
+        {
+          diagnosis,
+          symptoms: null,
+          treatmentNotes: null,
+          prescription: rx ? rx.value.trim() : null,
+          followUpInstructions: fu ? fu.value.trim() : null,
+          followUpDate: null,
+        },
+        Boolean(state.doctor.summary)
+      );
+
+      state.doctor.summary = summary;
+      setStatus(status, "Summary saved. The patient can now read it.");
+    } catch (error) {
+      setStatus(status, error.message, true);
+    } finally {
+      if (save) save.disabled = false;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Consultation room (patient and doctor)
+  // ---------------------------------------------------------------
+
+  async function loadConsultationPicker() {
+    if (!S) return;
+
+    const select = $("consult-pick");
+    const empty = document.querySelector("[data-consult-empty]");
+    const layout = document.querySelector("[data-consult-layout]");
+
+    try {
+      const list =
+        S.role === "DOCTOR"
+          ? await MC.doctorAppointments({})
+          : await MC.myAppointments();
+
+      const appointments = (Array.isArray(list) ? list : []).filter(
+        (item) =>
+          item &&
+          ["IN_CONSULTATION", "COMPLETED"].includes(item.status)
+      );
+
+      state.consult.list = appointments;
+
+      if (select) {
+        select.replaceChildren();
+
+        if (!appointments.length) {
+          const option = el("option", "", "No consultations yet");
+          option.value = "";
+          select.append(option);
+        }
+
+        appointments.forEach((appointment) => {
+          const who =
+            S.role === "DOCTOR"
+              ? appointment.patientName || "Patient"
+              : doctorName(appointment);
+          const option = el(
+            "option",
+            "",
+            referenceOf(appointment.bookingReference) +
+              " · " +
+              who +
+              " · " +
+              formatDate(appointment.sessionDate) +
+              " · " +
+              (appointment.status === "IN_CONSULTATION"
+                ? "In consultation"
+                : "Completed")
+          );
+          option.value = appointment.appointmentId;
+          select.append(option);
+        });
+
+        const requested =
+          state.consult.requestedId ||
+          state.consult.appointmentId ||
+          (appointments[0] && appointments[0].appointmentId);
+
+        state.consult.requestedId = null;
+
+        if (requested && appointments.some((item) => item.appointmentId === requested)) {
+          select.value = requested;
+          await openConsultation(requested, appointments);
+          return;
+        }
+      }
+
+      if (!appointments.length) {
+        if (empty) empty.hidden = false;
+        if (layout) layout.hidden = true;
+        state.consult.appointmentId = null;
+        state.consult.appointment = null;
+        return;
+      }
+
+      if (empty) empty.hidden = true;
+      await openConsultation(select ? select.value : appointments[0].appointmentId, appointments);
+    } catch (error) {
+      if (error.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      setAppMessage(error.message);
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = error.message;
+      }
+    }
+  }
+
+  async function openConsultation(appointmentId, knownList) {
+    if (!appointmentId) return;
+
+    const list = knownList || state.consult.list || [];
+    let appointment = list.find(
+      (item) => item.appointmentId === appointmentId
+    );
+
+    if (!appointment && S.role === "CUSTOMER") {
+      appointment = state.appointments.find(
+        (item) => item.appointmentId === appointmentId
+      );
+    }
+
+    if (!appointment) {
+      setAppMessage("That consultation could not be loaded.");
+      return;
+    }
+
+    state.consult.appointmentId = appointmentId;
+    state.consult.appointment = appointment;
+    state.consult.summary = null;
+
+    const select = $("consult-pick");
+    if (select) select.value = appointmentId;
+
+    const empty = document.querySelector("[data-consult-empty]");
+    const layout = document.querySelector("[data-consult-layout]");
+    if (empty) empty.hidden = true;
+    if (layout) layout.hidden = false;
+
+    renderConsultHeader(appointment);
+
+    await Promise.allSettled([
+      loadChatHistory(appointmentId),
+      loadConsultSummary(appointmentId),
+    ]);
+
+    subscribeConsultation(appointment);
+  }
+
+  function renderConsultHeader(appointment) {
+    const title = document.querySelector("[data-consult-title]");
+    const meta = document.querySelector("[data-consult-meta]");
+    const status = document.querySelector("[data-consult-status]");
+    const note = document.querySelector("[data-chat-note]");
+    const input = $("consult-c");
+    const send = document.querySelector("[data-chat-send]");
+
+    if (title) {
+      title.textContent =
+        appointment.consultationType === "ONLINE"
+          ? "Online consultation"
+          : "Consultation";
+    }
+
+    if (meta) {
+      const who =
+        S.role === "DOCTOR"
+          ? appointment.patientName || "Patient"
+          : doctorName(appointment);
+      meta.textContent = [
+        who,
+        appointment.specialisation || "",
+        "Ref " + referenceOf(appointment.bookingReference),
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
+    if (status) {
+      const entry = APPT_STATUS[appointment.status] || ["Unknown", "slate"];
+      status.className =
+        "inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap " +
+        (TONE[entry[1]] || TONE.slate);
+      status.textContent = entry[0];
+    }
+
+    const active = appointment.status === "IN_CONSULTATION";
+    const participant =
+      S.role === "CUSTOMER" || S.role === "DOCTOR";
+
+    if (input) {
+      input.disabled = !active || !participant;
+      input.placeholder = active
+        ? "Type a message…"
+        : "This consultation is read-only";
+    }
+
+    if (send) send.disabled = !active || !participant;
+
+    if (note) {
+      note.textContent = active
+        ? "Messages are stored securely. The doctor can complete the consultation at any time."
+        : "This consultation has ended, so the chat is read-only. The summary remains available.";
+    }
+  }
+
+  async function loadChatHistory(appointmentId) {
+    const log = document.querySelector("[data-chat-log]");
+    if (!log) return;
+
+    log.replaceChildren();
+
+    try {
+      const messages = await MC.chatHistory(appointmentId);
+
+      if (!Array.isArray(messages) || !messages.length) {
+        log.append(
+          el(
+            "p",
+            "text-sm text-mute",
+            "No messages yet. Say hello to your doctor."
+          )
+        );
+        return;
+      }
+
+      messages.forEach((message) => appendChatMessage(message));
+      log.scrollTop = log.scrollHeight;
+    } catch (error) {
+      log.append(el("p", "text-sm text-bad", error.message));
+    }
+  }
+
+  function appendChatMessage(message) {
+    const log = document.querySelector("[data-chat-log]");
+    if (!log) return;
+
+    const own = S && message.senderUserId === S.id;
+    const wrapper = el(
+      "div",
+      "max-w-[80%] px-3 py-2 border rounded-xl " +
+        (own
+          ? "self-end bg-sky-50 border-sky-200"
+          : "bg-white border-line")
+    );
+
+    const meta = el(
+      "p",
+      "mb-1 text-[10px] font-semibold uppercase tracking-wide text-mute",
+      (message.senderName || titleCase(message.senderRole)) +
+        " · " +
+        formatDateTime(message.sentAt)
+    );
+
+    const body = el("p", "whitespace-pre-wrap break-words", message.content);
+
+    wrapper.append(meta, body);
+    log.append(wrapper);
+  }
+
+  function subscribeConsultation(appointment) {
+    const id = appointment.appointmentId;
+
+    if (state.consult.chatSub) unsubscribe("chat");
+    if (state.consult.typingSub) unsubscribe("typing");
+    if (state.consult.statusSub) unsubscribe("status");
+
+    state.consult.chatSub = subscribe(
+      "chat",
+      "/topic/appointments/" + id + "/chat",
+      (message) => {
+        const log = document.querySelector("[data-chat-log]");
+        if (!log) return;
+
+        const placeholder = log.querySelector("p.text-mute");
+        if (placeholder) placeholder.remove();
+
+        const nearBottom =
+          log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+
+        appendChatMessage(message);
+
+        if (nearBottom) log.scrollTop = log.scrollHeight;
+      }
+    );
+
+    state.consult.typingSub = subscribe(
+      "typing",
+      "/topic/appointments/" + id + "/typing",
+      (payload) => {
+        if (!payload || S.role === payload.senderRole) return;
+
+        const node = document.querySelector("[data-typing]");
+        if (!node) return;
+
+        node.textContent = payload.typing
+          ? (payload.senderName || "The other participant") + " is typing…"
+          : "";
+
+        if (state.consult.remoteTypingTimer) {
+          clearTimeout(state.consult.remoteTypingTimer);
+        }
+
+        if (payload.typing) {
+          state.consult.remoteTypingTimer = setTimeout(() => {
+            node.textContent = "";
+          }, 4000);
+        }
+      }
+    );
+
+    subscribe("chat-errors", "/user/queue/errors", (payload) => {
+      if (payload && payload.message) setAppMessage(payload.message);
+    });
+
+    state.consult.statusSub = subscribe(
+      "status",
+      "/topic/appointments/" + id + "/status",
+      async (payload) => {
+        if (!payload || !state.consult.appointment) return;
+
+        state.consult.appointment.status = payload.status;
+        renderConsultHeader(state.consult.appointment);
+
+        if (payload.status === "COMPLETED") {
+          await loadConsultSummary(id);
+          if (state.consult.typingTimer) clearTimeout(state.consult.typingTimer);
+          const node = document.querySelector("[data-typing]");
+          if (node) node.textContent = "";
+        }
+      }
+    );
+  }
+
+  function sendChatMessage() {
+    const input = $("consult-c");
+    const appointment = state.consult.appointment;
+
+    if (!input || !appointment) return;
+
+    const content = input.value.trim();
+
+    if (!content) return;
+
+    if (content.length > MAX_CHAT_LENGTH) {
+      setAppMessage("Messages must be 1000 characters or fewer.");
+      return;
+    }
+
+    if (appointment.status !== "IN_CONSULTATION") {
+      setAppMessage("This consultation is read-only.");
+      return;
+    }
+
+    try {
+      publish("/app/appointments/" + appointment.appointmentId + "/chat", {
+        content,
+      });
+
+      input.value = "";
+      sendTyping(false);
+    } catch (error) {
+      setAppMessage(error.message);
+    }
+  }
+
+  function sendTyping(typing) {
+    const appointment = state.consult.appointment;
+    if (!appointment || appointment.status !== "IN_CONSULTATION") return;
+    if (!S || !["CUSTOMER", "DOCTOR"].includes(S.role)) return;
+
+    try {
+      publish(
+        "/app/appointments/" + appointment.appointmentId + "/typing",
+        { typing: Boolean(typing) }
+      );
+    } catch {
+      // Typing is best-effort.
+    }
+  }
+
+  function handleTypingInput() {
+    const appointment = state.consult.appointment;
+    if (!appointment || appointment.status !== "IN_CONSULTATION") return;
+
+    if (state.consult.typingStopTimer) {
+      clearTimeout(state.consult.typingStopTimer);
+    }
+
+    if (Date.now() - state.consult.typingSentAt > 2000) {
+      state.consult.typingSentAt = Date.now();
+      sendTyping(true);
+    }
+
+    state.consult.typingStopTimer = setTimeout(() => {
+      state.consult.typingSentAt = 0;
+      sendTyping(false);
+    }, 4000);
+  }
+
+  async function loadConsultSummary(appointmentId) {
+    const empty = document.querySelector("[data-summary-empty]");
+    const summary = document.querySelector("[data-summary]");
+    const diagnosis = document.querySelector("[data-summary-diagnosis]");
+    const prescription = document.querySelector("[data-summary-prescription]");
+    const followup = document.querySelector("[data-summary-followup]");
+    const date = document.querySelector("[data-summary-date]");
+    const feedback = document.querySelector("[data-feedback-form]");
+    const line = document.querySelector("[data-consult-summary-line]");
+
+    if (summary) summary.hidden = true;
+    if (empty) empty.hidden = false;
+
+    const appointment = state.consult.appointment;
+
+    if (feedback) {
+      feedback.hidden = !(S.role === "CUSTOMER" && appointment &&
+        appointment.status === "COMPLETED");
+    }
+
+    if (line) {
+      line.textContent =
+        appointment && appointment.status === "COMPLETED"
+          ? "Consultation completed. You can read the summary and leave feedback."
+          : "Visible to you after the doctor completes the consultation.";
+    }
+
+    try {
+      const record = await MC.summary(appointmentId);
+      if (!record) return;
+
+      state.consult.summary = record;
+
+      if (empty) empty.hidden = true;
+      if (summary) summary.hidden = false;
+      if (diagnosis) diagnosis.textContent = record.diagnosis || "—";
+      if (prescription) {
+        prescription.textContent =
+          record.prescription || record.treatmentNotes || "—";
+      }
+      if (followup) {
+        followup.textContent =
+          record.followUpInstructions ||
+          (record.followUpDate
+            ? "Follow up on " + formatDate(record.followUpDate)
+            : "—");
+      }
+      if (date) {
+        date.textContent =
+          "Published " +
+          formatDateTime(record.updatedAt || record.createdAt) +
+          (record.doctorName ? " by " + doctorName({ doctorName: record.doctorName }) : "");
+      }
+    } catch (error) {
+      if (error.status !== 404 && empty) {
+        empty.hidden = false;
+        empty.textContent = error.message;
+      }
+    }
+  }
+
+  async function submitFeedback() {
+    const appointment = state.consult.appointment;
+    const rating = $("consult-rt");
+    const comment = $("consult-fc");
+    const status = document.querySelector("[data-feedback-status]");
+    const form = document.querySelector("[data-feedback-form]");
+
+    if (!appointment) return;
+
+    if (form) {
+      const button = form.querySelector("button[type=submit]");
+      if (button) button.disabled = true;
+    }
+
+    try {
+      await MC.submitReview(
+        appointment.appointmentId,
+        Number(rating ? rating.value : 5),
+        comment ? comment.value.trim() : ""
+      );
+      setStatus(status, "Thank you — your feedback has been recorded.");
+    } catch (error) {
+      setStatus(status, error.message, true);
+    } finally {
+      if (form) {
+        const button = form.querySelector("button[type=submit]");
+        if (button) button.disabled = false;
+      }
+    }
+  }
+
+  function printSummary() {
+    const appointment = state.consult.appointment;
+    const summary = state.consult.summary;
+
+    if (!appointment || !summary) {
+      setAppMessage("The summary is not available yet.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const documentTitle = document.createElement("title");
+    documentTitle.textContent = "MediChannel consultation summary";
+
+    const style = document.createElement("style");
+    style.textContent =
+      "body{font:14px system-ui,sans-serif;margin:32px;color:#1a202c}h1{font-size:20px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:#718096;margin-top:20px}";
+
+    const body = printWindow.document.body;
+    body.replaceChildren();
+    printWindow.document.head.append(documentTitle, style);
+
+    body.append(el("h1", "", "MediChannel · Consultation summary"));
+    body.append(
+      el(
+        "p",
+        "",
+        "Patient: " +
+          (S.role === "DOCTOR"
+            ? appointment.patientName || "Patient"
+            : S.email) +
+          " · Reference " +
+          referenceOf(appointment.bookingReference)
+      )
+    );
+    body.append(el("h2", "", "Diagnosis"));
+    body.append(el("p", "", summary.diagnosis || "—"));
+    body.append(el("h2", "", "Advice and prescription"));
+    body.append(
+      el("p", "", summary.prescription || summary.treatmentNotes || "—")
+    );
+    body.append(el("h2", "", "Follow-up"));
+    body.append(el("p", "", summary.followUpInstructions || "—"));
+
+    printWindow.focus();
+    printWindow.print();
+  }
+
+  // ---------------------------------------------------------------
+  // Authentication forms and validation
+  // ---------------------------------------------------------------
+
+  const V = {
+    name: (value) =>
+      value.trim().length < 3 && "Please enter your full name.",
+    nic: (value) =>
+      !/^(\d{9}[VvXx]|\d{12})$/.test(value.trim()) &&
+      "That NIC doesn’t look right. Use 9 digits + V/X, or 12 digits.",
+    dob: (value) =>
+      (!value ||
+        new Date(value) > new Date() ||
+        new Date(value) < new Date("1900-01-01")) &&
+      "Please choose your date of birth.",
+    phone: (value) =>
+      !/^07\d{8}$/.test(value.trim()) &&
+      "Please enter your phone number like 07XXXXXXXX.",
+    email: (value) =>
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) &&
+      "Please enter a valid email address.",
+    pw: (value) =>
+      !(
+        value.length >= 12 &&
+        /[A-Za-z]/.test(value) &&
+        /\d/.test(value) &&
+        /[^A-Za-z0-9]/.test(value)
+      ) && "Use at least 12 characters, with a letter, a number and a symbol.",
+    pw2: (value, form) =>
+      value !== form.elements.password.value &&
+      "The passwords don’t match yet.",
+    req: (value) => !value && "Please fill this in.",
+  };
+
+  function chk(element) {
+    const validator = V[element.dataset.v];
+    if (!validator) return true;
+
+    const message = validator(element.value, element.form) || "";
+    const parts = element.id.split("-");
+
+    element.setAttribute("aria-invalid", message ? "true" : "false");
+
+    const error = $(parts[0] + "-e_" + parts[1]);
+    if (error) error.textContent = message;
+
+    return !message;
+  }
+
+  function allOk(form) {
+    return Array.from(form.querySelectorAll("[data-v]"))
+      .map(chk)
+      .every(Boolean);
+  }
+
+  function showErr(id, message) {
+    const box = $(id);
+    if (!box) return;
+    box.textContent = message;
+    box.hidden = false;
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const error = $("login-err");
+    const success = $("login-ok");
+
+    if (error) error.hidden = true;
+    if (success) success.hidden = true;
+
+    if (!allOk(form)) return;
+
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          email: form.email.value.trim(),
+          password: form.password.value,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        showErr(
+          "login-err",
+          result.message || "That email or password doesn’t look right."
+        );
+        return;
+      }
+
+      if (!result.user || !HOME[result.user.role]) {
+        showErr("login-err", "The login service returned an unexpected response.");
+        return;
+      }
+
+      setSession(result.user);
+      form.reset();
+      render();
+
+      const intent = readIntent();
+
+      if (intent && S.role === "CUSTOMER") {
+        setAppMessage("");
+        nav("index");
+      } else {
+        setAppMessage("");
+        nav(HOME[S.role]);
+      }
+    } catch {
+      showErr("login-err", "Unable to reach the login service. Please try again.");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function handleRegister(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const error = $("register-err");
+
+    if (error) error.hidden = true;
+
+    if (!allOk(form)) return;
+
+    const values = Object.fromEntries(new FormData(form));
+    const parts = String(values.name || "").trim().split(/\s+/);
+    const firstName = parts.shift() || "";
+    const lastName = parts.join(" ");
+
+    if (!firstName || !lastName) {
+      showErr("register-err", "Enter your first and last name.");
+      return;
+    }
+
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email: values.email,
+          password: values.password,
+          confirmPassword: values.confirm,
+          nic: values.nic,
+          dateOfBirth: values.dob,
+          gender: values.gen,
+          phone: values.ph,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.status === 202) {
+        showErr("register-err", result.message || "Your account is awaiting activation.");
+        return;
+      }
+
+      if (!response.ok) {
+        showErr(
+          "register-err",
+          result.message || "We couldn’t create your account just now."
+        );
+        return;
+      }
+
+      if (result.user && HOME[result.user.role]) {
+        setSession(result.user);
+        form.reset();
+        render();
+        nav(HOME[result.user.role]);
+        return;
+      }
+
+      flash = "Your account and patient profile are ready. Please log in.";
+      form.reset();
+      nav("login");
+    } catch {
+      showErr("register-err", "Unable to reach the registration service.");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function logout(button) {
+    if (button) button.disabled = true;
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch {
+      // Clear locally regardless.
+    }
+
+    S = null;
+    disconnectRealtime();
+    state.appointments = [];
+    state.appointmentsLoaded = false;
+    state.doctor = {
+      sessions: [],
+      sessionsLoaded: false,
+      sessionId: null,
+      queue: null,
+      selected: null,
+      summary: null,
+      queueTimer: null,
+    };
+    state.consult.appointmentId = null;
+    state.consult.appointment = null;
+    state.consult.summary = null;
+    render();
+    hideQueue();
+    nav("welcome");
+  }
+
+  // ---------------------------------------------------------------
+  // Event wiring
+  // ---------------------------------------------------------------
+
+  document.addEventListener("focusout", (event) => {
+    if (event.target.dataset && event.target.dataset.v) {
+      chk(event.target);
+    }
+  });
+
+  document.addEventListener("input", (event) => {
+    const target = event.target;
+
+    if (target.dataset && target.dataset.v && target.getAttribute("aria-invalid") === "true") {
+      chk(target);
+    }
+
+    if (target.id === "register-pw") {
+      const score = [
+        target.value.length >= 8,
+        /[A-Za-z]/.test(target.value),
+        /\d/.test(target.value),
+        /[^A-Za-z0-9]/.test(target.value),
+      ].filter(Boolean).length;
+
+      const strength = $("register-st");
+      if (strength) {
+        strength.style.width = (score / 4) * 100 + "%";
+        strength.style.background =
+          score >= 3 ? "#38A169" : score === 2 ? "#D69E2E" : "#E53E3E";
+      }
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    const showButton = event.target.closest("[data-show]");
+    if (showButton) {
+      const input = $(showButton.closest("[data-view]").dataset.view + "-" + showButton.dataset.show);
+      if (input) {
+        input.type = input.type === "password" ? "text" : "password";
+        showButton.textContent = input.type === "password" ? "Show" : "Hide";
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-out]")) {
+      void logout(event.target.closest("[data-out]"));
+      return;
+    }
+
+    if (event.target.closest("[data-wake-retry]")) {
+      void wakeBackend();
+      return;
+    }
+
+    const panelLink = event.target.closest("[data-panel-link]");
+    if (panelLink) {
+      event.preventDefault();
+      activatePanel(panelLink.closest("[data-view]"), panelLink);
+      return;
+    }
+
+    const book = event.target.closest("[data-book-session]");
+    if (book) {
+      const session = state.sessions.find(
+        (item) => item.sessionId === book.dataset.bookSession
+      );
+      if (session) selectSession(session);
+      return;
+    }
+
+    if (event.target.closest("[data-booking-confirm]")) {
+      void confirmBooking();
+      return;
+    }
+
+    const payBookingButton = event.target.closest("[data-booking-pay]");
+    if (payBookingButton) {
+      void payBooking(payBookingButton.dataset.bookingPay);
+      return;
+    }
+
+    if (event.target.closest("[data-booking-goto]")) {
+      nav("appointments");
+      return;
+    }
+
+    const payRow = event.target.closest("[data-pay-appointment]");
+    if (payRow) {
+      void payAppointment(payRow.dataset.payAppointment, payRow);
+      return;
+    }
+
+    const checkin = event.target.closest("[data-checkin-appointment]");
+    if (checkin) {
+      void checkInAppointment(checkin.dataset.checkinAppointment);
+      return;
+    }
+
+    const cancel = event.target.closest("[data-cancel-appointment]");
+    if (cancel) {
+      void cancelAppointment(cancel.dataset.cancelAppointment);
+      return;
+    }
+
+    const openConsult = event.target.closest("[data-open-consult]");
+    if (openConsult) {
+      state.consult.requestedId = openConsult.dataset.openConsult;
+      nav("consult");
+      return;
+    }
+
+    const doctorRowAction = event.target.closest("[data-doctor-action]");
+    if (doctorRowAction) {
+      void runDoctorAction(
+        doctorRowAction.dataset.doctorAction,
+        doctorRowAction.dataset.doctorId,
+        doctorRowAction
+      );
+      return;
+    }
+
+    if (event.target.closest("[data-doctor-refresh]")) {
+      void loadDoctorQueue(state.doctor.sessionId);
+      return;
+    }
+
+    if (event.target.closest("[data-save-summary]")) {
+      void saveDoctorSummary();
+      return;
+    }
+
+    if (event.target.closest("[data-print-summary]")) {
+      printSummary();
+      return;
+    }
+  });
+
+  document.addEventListener("change", (event) => {
+    if (event.target.id === "doctor-session-select") {
+      state.doctor.sessionId = event.target.value;
+      void loadDoctorQueue(event.target.value);
+      return;
+    }
+
+    if (event.target.id === "consult-pick") {
+      void openConsultation(event.target.value);
+    }
+  });
+
+  const loginForm = $("login-f");
+  if (loginForm) loginForm.addEventListener("submit", handleLogin);
+
+  const registerForm = $("register-f");
+  if (registerForm) registerForm.addEventListener("submit", handleRegister);
+
+  const searchForm = document.querySelector('form[aria-label="Search sessions"]');
+  if (searchForm) {
+    searchForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      state.sessionsLoaded = false;
+      void loadSessions();
+    });
+  }
+
+  const chatForm = document.querySelector("[data-chat-form]");
+  if (chatForm) {
+    chatForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      sendChatMessage();
+    });
+  }
+
+  const chatInput = $("consult-c");
+  if (chatInput) chatInput.addEventListener("input", handleTypingInput);
+
+  const feedbackForm = document.querySelector("[data-feedback-form]");
+  if (feedbackForm) {
+    feedbackForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void submitFeedback();
+    });
+  }
+
+  window.addEventListener("hashchange", () => go());
+
+  window.addEventListener("pageshow", () => {
+    if (document.body.dataset.appReady === "true" && S) {
+      void refreshPatientQueue();
+    }
+  });
+
+  window.addEventListener("online", () => {
+    void wakeBackend();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void wakeBackend();
+  });
+
+  // ---------------------------------------------------------------
+  // Localisation (English / Sinhala)
+  // ---------------------------------------------------------------
+
+  let lang = "en";
+  try {
+    lang = localStorage.getItem("mc-lang") || "en";
+  } catch {
+    // Storage can be unavailable in private modes.
+  }
+
+  const D = {
+  "Choose a doctor and a time. Get your number instantly.": "වෛද්‍යවරයෙකු සහ වේලාවක් තෝරන්න. ඔබේ අංකය වහාම ලබාගන්න.",
+  "See who is being called now. We’ll alert you when your turn is near.": "දැන් අමතන්නේ කාවදැයි බලන්න. ඔබේ වාරය ළඟා වූ විට අපි දැනුම් දෙන්නෙමු.",
+  "Your health details are encrypted. Only you and your doctor can read them.": "ඔබේ සෞඛ්‍ය තොරතුරු සංකේතනය කර ඇත. කියවිය හැක්කේ ඔබට සහ ඔබේ වෛද්‍යවරයාට පමණි.",
+  "Welcome to Lanka Care Hospital, Colombo": "ලංකා කෙයාර් රෝහල, කොළඹ වෙත සාදරයෙන් පිළිගනිමු",
+  "We’re glad you’re here. Book a visit, follow your number live, or chat with your doctor online, so you spend less time waiting and more time feeling better.": "ඔබ අප වෙත පැමිණීම ගැන සතුටුයි. වෙන්කිරීමක් කරන්න, ඔබේ අංකය සජීවීව බලන්න, නැතහොත් වෛද්‍යවරයා සමඟ මාර්ගගතව කතා කරන්න; බලා සිටීමට අඩුවෙන් සහ සුවය ලැබීමට වැඩි කාලයක් වැය කරන්න.",
+  "Create a free account": "නොමිලේ ගිණුමක් සාදන්න",
+  "— it only takes a minute.": "— එයට මිනිත්තුවක් පමණක් ගත වේ.",
+  "Your doctor,": "ඔබේ වෛද්‍යවරයා,",
+  "one tap away": "එක ස්පර්ශයකින්",
+  "Free to join": "නොමිලේ සම්බන්ධ වන්න",
+  "Encrypted data": "සංකේතනය කළ දත්ත",
+  "No phone queues": "දුරකථන පෝලිම් නැත",
+  "How it works": "එය ක්‍රියා කරන ආකාරය",
+  "Three simple steps to see your doctor.": "වෛද්‍යවරයා හමුවීමට සරල පියවර තුනක්.",
+  "✓ Booked · #14": "✓ වෙන්කළා · #14",
+  "Booked · #14": "වෙන්කළා · #14",
+  "Visiting doctors": "පැමිණෙන වෛද්‍යවරු",
+  "Specialisations": "විශේෂත්වයන්",
+  "Sessions every week": "සතියකට සැසි",
+  "You’re booked in!": "වෙන්කිරීම සාර්ථකයි!",
+  "Doctor is seeing patients now": "වෛද්‍යවරයා දැන් රෝගීන් බලමින් සිටී",
+  "Now calling": "දැන් අමතන අංකය",
+  "4 people ahead of you": "ඔබට පෙර පුද්ගලයන් 4ක්",
+  "Your estimated time": "ඔබේ ඇස්තමේන්තු වේලාව",
+  "Your turn is expected around 19:10. We’ll let you know when you’re 3 numbers away, and again when the doctor calls you.": "ඔබේ වාරය 19:10 පමණ වනු ඇත. ඔබට අංක 3ක් තිබෙන විටත්, වෛද්‍යවරයා ඔබව ඇමතූ විටත් අපි දැනුම් දෙන්නෙමු.",
+  "Your visits, past and upcoming": "ඔබේ පසුගිය සහ ඉදිරි හමුවීම්",
+  "Booking ref": "වෙන්කිරීමේ යොමුව",
+  "When": "කවදාද",
+  "Visit type": "හමුවීමේ වර්ගය",
+  "Not paid yet": "තවම ගෙවා නැත",
+  "Too late to cancel": "අවලංගු කිරීමට ප්‍රමාදයි",
+  "Cancelled, kept in your history": "අවලංගු කළා; ඔබේ ඉතිහාසයේ තබා ඇත",
+  "View summary & leave feedback": "සාරාංශය බලා ප්‍රතිචාර දෙන්න",
+  "Cancel booking": "වෙන්කිරීම අවලංගු කරන්න",
+  "You can cancel an unpaid appointment up to 3 hours before it starts. Cancelled appointments stay in your history.": "නොගෙවූ වෙන්කිරීමක් ආරම්භයට පැය 3කට පෙර දක්වා අවලංගු කළ හැක. අවලංගු කළ වෙන්කිරීම් ඔබේ ඉතිහාසයේ රැඳේ.",
+  "Reference": "යොමුව",
+  "Your reference is MC-20261109-0142. Your number is #14, and the doctor should see you around 19:10.": "ඔබේ යොමු අංකය MC-20261109-0142 ය. ඔබේ අංකය #14 වන අතර වෛද්‍යවරයා ඔබව බලන්නේ 19:10 පමණය.",
+  "Welcome": "සාදරයෙන් පිළිගනිමු",
+  "Lanka Care Hospital, Colombo": "ලංකා කෙයාර් රෝහල, කොළඹ",
+  "Your doctor, one tap away": "ඔබේ වෛද්‍යවරයා, එක ස්පර්ශයකින්",
+  "Book a visit, follow your number live, or chat with your doctor online. No more waiting on the phone or in long queues.": "වෙන්කිරීමක් කරන්න, ඔබේ අංකය සජීවීව බලන්න, නැතහොත් වෛද්‍යවරයා සමඟ මාර්ගගතව කතා කරන්න. දුරකථනයේ හෝ දිගු පෝලිම්වල බලා සිටීම අවසන්.",
+  "New here?": "මෙහි අලුත්ද?",
+  "Book in minutes": "මිනිත්තු කිහිපයකින් වෙන්කරන්න",
+  "Pick a doctor, choose a time and get your number straight away.": "වෛද්‍යවරයෙකු සහ වේලාවක් තෝරා ඔබේ අංකය වහාම ලබාගන්න.",
+  "Follow your queue": "ඔබේ පෝලිම බලන්න",
+  "See who is being served now and get a nudge when your turn is near.": "දැන් අමතන්නේ කාවදැයි බලන්න; ඔබේ වාරය ළඟා වූ විට දැනුම්දීමක් ලබාගන්න.",
+  "Safe and private": "ආරක්ෂිත සහ පෞද්ගලිකයි",
+  "Your health details are encrypted and only you and your doctor can read them.": "ඔබේ සෞඛ්‍ය තොරතුරු සංකේතනය කර ඇති අතර කියවිය හැක්කේ ඔබට සහ ඔබේ වෛද්‍යවරයාට පමණි.",
+  "Find doctors": "වෛද්‍යවරුන් සොයන්න",
+  "My appointments": "මගේ වෙන්කිරීම්",
+  "Consultation": "වෛද්‍ය උපදේශනය",
+  "Doctor": "වෛද්‍ය",
+  "Manager": "කළමනාකරු",
+  "Admin": "පරිපාලක",
+  "Log in": "ඇතුල් වන්න",
+  "Register": "ලියාපදිංචි වන්න",
+  "Log out": "පිටවන්න",
+  "Customer": "රෝගියා",
+  "Find a doctor": "වෛද්‍යවරයෙකු සොයන්න",
+  "Lanka Care Hospital, Colombo · all times Asia/Colombo": "ලංකා කෙයාර් රෝහල, කොළඹ · සියලු වේලාවන් ආසියා/කොළඹ",
+  "Doctor name": "වෛද්‍යවරයාගේ නම",
+  "Specialisation": "විශේෂත්වය",
+  "Date": "දිනය",
+  "Session type": "සැසි වර්ගය",
+  "All": "සියල්ල",
+  "Cardiology": "හෘද රෝග",
+  "Neurology": "ස්නායු රෝග",
+  "Paediatrics": "ළමා රෝග",
+  "Physical": "රෝහලේදී",
+  "Online": "මාර්ගගත",
+  "Search sessions": "සැසි සොයන්න",
+  "Availability updates when anyone books or cancels": "ඕනෑම කෙනෙක් වෙන්කළ හෝ අවලංගු කළ විට ඉතිරි ස්ථාන සජීවීව යාවත්කාලීන වේ",
+  "Spots left (live)": "ඉතිරි ස්ථාන (සජීවී)",
+  "Book": "වෙන්කරන්න",
+  "Session full": "සැසිය පිරී ඇත",
+  "No spots left": "ස්ථාන ඉතිරි නැත",
+  "What would you like to see the doctor about?": "ඔබ වෛද්‍යවරයා හමුවීමට කැමති කුමක් සඳහාද?",
+  "Please tell us a little about why you’re visiting.": "ඔබ පැමිණෙන්නේ ඇයිදැයි කෙටියෙන් අපට කියන්න.",
+  "You’ll get your queue number as soon as you book, and it’s yours alone. Your estimated time depends on your number and any delays.": "වෙන්කළ විගස ඔබට පෝලිම් අංකයක් ලැබේ; එය ඔබට පමණක් වෙන්වේ. ඔබේ ඇස්තමේන්තු වේලාව රඳා පවතින්නේ ඔබේ අංකය සහ ප්‍රමාදයන් මතය.",
+  "Confirm my booking": "මගේ වෙන්කිරීම තහවුරු කරන්න",
+  "To finish booking, please log in or create a free account.": "වෙන්කිරීම අවසන් කිරීමට කරුණාකර ඇතුල් වන්න, නැතහොත් නොමිලේ ගිණුමක් සාදන්න.",
+  "Upcoming and past": "ඉදිරි සහ පසුගිය",
+  "Session": "සැසිය",
+  "Type": "වර්ගය",
+  "Status": "තත්ත්වය",
+  "Payment": "ගෙවීම",
+  "Booked": "වෙන්කළා",
+  "Pending": "පොරොත්තුවෙන්",
+  "Completed": "අවසන්",
+  "Cancelled": "අවලංගුයි",
+  "Cancel": "අවලංගු කරන්න",
+  "Now serving": "දැන් අමතන අංකය",
+  "Your number": "ඔබේ අංකය",
+  "Est. time": "ඇස්තමේන්තු වේලාව",
+  "Session in progress": "සැසිය පවතී",
+  "Summary & feedback": "සාරාංශය සහ ප්‍රතිචාර",
+  "Kept on record": "වාර්තාවේ තබා ඇත",
+  "Cancel closed (BR-07)": "අවලංගු කිරීම වසා ඇත",
+  "Unpaid appointments can be cancelled until 3 hours before the session. Cancelled appointments stay in your history.": "නොගෙවූ වෙන්කිරීම් සැසියට පැය 3කට පෙර දක්වා අවලංගු කළ හැක. අවලංගු කළ වෙන්කිරීම් ඔබේ ඉතිහාසයේ රැඳේ.",
+  "Today’s sessions": "අද සැසි",
+  "Patient list": "රෝගී ලැයිස්තුව",
+  "Notes": "සටහන්",
+  "Patients in this session": "මෙම සැසියේ රෝගීන්",
+  "No.": "අංකය",
+  "Patient": "රෝගියා",
+  "Check-in": "පැමිණීම",
+  "Start session": "සැසිය අරඹන්න",
+  "End session": "සැසිය අවසන් කරන්න",
+  "Complete": "අවසන් කරන්න",
+  "No-show": "නොපැමිණියා",
+  "Waiting": "බලා සිටින",
+  "In consultation": "උපදේශනයේ",
+  "In progress": "පවතී",
+  "Arrived": "පැමිණියා",
+  "Not arrived": "පැමිණ නැත",
+  "Next": "ඊළඟ",
+  "Diagnosis summary": "රෝග විනිශ්චය සාරාංශය",
+  "Advice and prescription": "උපදෙස් සහ වට්ටෝරුව",
+  "Save notes": "සටහන් සුරකින්න",
+  "Reason for visit": "පැමිණීමේ හේතුව",
+  "Online consultation": "මාර්ගගත උපදේශනය",
+  "Private chat": "පෞද්ගලික චැට්",
+  "Connected": "සම්බන්ධයි",
+  "Message (max 1000 characters)": "පණිවිඩය (උපරිම අක්ෂර 1000)",
+  "Send": "යවන්න",
+  "End consultation": "උපදේශනය අවසන් කරන්න",
+  "Doctor’s summary": "වෛද්‍යවරයාගේ සාරාංශය",
+  "Consultation summary": "උපදේශන සාරාංශය",
+  "Print summary & prescription": "සාරාංශය සහ වට්ටෝරුව මුද්‍රණය කරන්න",
+  "Feedback": "ප්‍රතිචාර",
+  "Rating (1–5)": "ශ්‍රේණිගත කිරීම (1–5)",
+  "Comment": "අදහස",
+  "Submit feedback": "ප්‍රතිචාර යවන්න",
+  "Manager dashboard": "කළමනාකරු උපකරණ පුවරුව",
+  "Dashboard": "උපකරණ පුවරුව",
+  "Sessions": "සැසි",
+  "Reception": "පිළිගැනීම",
+  "Notices and feedback": "දැන්වීම් සහ ප්‍රතිචාර",
+  "Book for walk-in patient": "පැමිණි රෝගියෙකු සඳහා වෙන්කරන්න",
+  "Sessions today": "අද සැසි ගණන",
+  "Appointments": "වෙන්කිරීම්",
+  "Physical / online": "රෝහලේදී / මාර්ගගත",
+  "No-show rate": "නොපැමිණීමේ අනුපාතය",
+  "Revenue": "ආදායම",
+  "Time": "වේලාව",
+  "Room": "කාමරය",
+  "Delay": "ප්‍රමාද කරන්න",
+  "Edit": "සංස්කරණය",
+  "Open": "විවෘතයි",
+  "Search today’s appointments": "අද වෙන්කිරීම් සොයන්න",
+  "Mark arrived": "පැමිණියා ලෙස සලකුණු කරන්න",
+  "Record payment": "ගෙවීම සටහන් කරන්න",
+  "Publish notice": "දැන්වීමක් පළ කරන්න",
+  "Approve": "අනුමත කරන්න",
+  "Hide": "සඟවන්න",
+  "Show": "පෙන්වන්න",
+  "System administration": "පද්ධති පරිපාලනය",
+  "System dashboard": "පද්ධති උපකරණ පුවරුව",
+  "Active accounts": "සක්‍රීය ගිණුම්",
+  "Doctors": "වෛද්‍යවරු",
+  "Managers": "කළමනාකරුවෝ",
+  "Failed logins today": "අද අසාර්ථක ඇතුල්වීම්",
+  "Staff accounts": "කාර්ය මණ්ඩල ගිණුම්",
+  "Name": "නම",
+  "Email": "විද්‍යුත් තැපෑල",
+  "Role": "භූමිකාව",
+  "Active": "සක්‍රීය",
+  "Inactive": "අක්‍රීය",
+  "Deactivate": "අක්‍රීය කරන්න",
+  "Activate": "සක්‍රීය කරන්න",
+  "Reset password": "මුරපදය යළි පිහිටුවන්න",
+  "Create staff account": "කාර්ය මණ්ඩල ගිණුමක් සාදන්න",
+  "Full name": "සම්පූර්ණ නම",
+  "Create account": "ගිණුම සාදන්න",
+  "A temporary password is issued and must be changed at first login.": "තාවකාලික මුරපදයක් ලැබේ; පළමු ඇතුල්වීමේදී එය වෙනස් කළ යුතුය.",
+  "Audit log": "විගණන සටහන",
+  "Action": "ක්‍රියාව",
+  "User": "පරිශීලක",
+  "IP": "IP",
+  "Welcome back": "නැවත සාදරයෙන් පිළිගනිමු",
+  "Log in to book and manage your appointments.": "වෙන්කිරීම් කිරීමට සහ කළමනාකරණයට ඇතුල් වන්න.",
+  "Password": "මුරපදය",
+  "New patient?": "අලුත් රෝගියෙක්ද?",
+  "Create an account": "ගිණුමක් සාදන්න",
+  "Doctor and manager accounts are created by the hospital IT administrator.": "වෛද්‍ය සහ කළමනාකරු ගිණුම් සාදන්නේ රෝහලේ තොරතුරු තාක්ෂණ පරිපාලකයා විසිනි.",
+  "That email or password doesn’t look right. Please try again.": "එම විද්‍යුත් තැපෑල හෝ මුරපදය නිවැරදි නැත. කරුණාකර නැවත උත්සාහ කරන්න.",
+  "Too many wrong attempts. For your safety, please try again in 15 minutes.": "වැරදි උත්සාහ ඉතා වැඩියි. ඔබේ ආරක්ෂාව සඳහා මිනිත්තු 15කින් නැවත උත්සාහ කරන්න.",
+  "Create your account": "ඔබේ ගිණුම සාදන්න",
+  "Create a free patient account to start booking.": "වෙන්කිරීම් ආරම්භ කිරීමට නොමිලේ රෝගී ගිණුමක් සාදන්න.",
+  "NIC": "ජාතික හැඳුනුම්පත් අංකය",
+  "Date of birth": "උපන් දිනය",
+  "Gender": "ස්ත්‍රී/පුරුෂ භාවය",
+  "Choose": "තෝරන්න",
+  "Female": "ගැහැණු",
+  "Male": "පිරිමි",
+  "Other": "වෙනත්",
+  "Phone": "දුරකථනය",
+  "Address": "ලිපිනය",
+  "Confirm password": "මුරපදය තහවුරු කරන්න",
+  "Already registered?": "දැනටමත් ලියාපදිංචිද?",
+  "You’re all set! Your account is ready. Please log in.": "සියල්ල සූදානම්! ඔබේ ගිණුම සාදා ඇත. කරුණාකර ඇතුල් වන්න.",
+  "There’s already an account with this email or NIC. Try logging in instead.": "මෙම විද්‍යුත් තැපෑල හෝ හැඳුනුම්පත් අංකයෙන් දැනටමත් ගිණුමක් ඇත. ඒ වෙනුවට ඇතුල් වීමට උත්සාහ කරන්න.",
+  "We couldn’t create your account just now. Please check your details and try again.": "ඔබේ ගිණුම දැන් සෑදීමට නොහැකි විය. විස්තර පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
+  "Please enter your full name.": "කරුණාකර ඔබේ සම්පූර්ණ නම ඇතුල් කරන්න.",
+  "That NIC doesn’t look right. Use 9 digits + V/X, or 12 digits.": "එම හැඳුනුම්පත් අංකය නිවැරදි නැත. ඉලක්කම් 9 + V/X, හෝ ඉලක්කම් 12 භාවිතා කරන්න.",
+  "Please choose your date of birth.": "කරුණාකර ඔබේ උපන් දිනය තෝරන්න.",
+  "Please enter your phone number like 07XXXXXXXX.": "කරුණාකර දුරකථන අංකය 07XXXXXXXX ආකාරයට ඇතුල් කරන්න.",
+  "Please enter a valid email address.": "කරුණාකර වලංගු විද්‍යුත් තැපැල් ලිපිනයක් ඇතුල් කරන්න.",
+  "Please enter your address.": "කරුණාකර ඔබේ ලිපිනය ඇතුල් කරන්න.",
+  "Use at least 12 characters, with a letter, a number and a symbol.": "අවම අක්ෂර 8ක්, අකුරක්, ඉලක්කමක් සහ සංකේතයක් සමඟ භාවිතා කරන්න.",
+  "The passwords don’t match yet.": "මුරපද තවම ගැළපෙන්නේ නැත.",
+  "Please fill this in.": "කරුණාකර මෙය පුරවන්න.",
+  "Skip the phone queue.": "දුරකථන පෝලිම මඟහරින්න.",
+  "Book a doctor, follow your number live and consult online, all in one place at Lanka Care Hospital.": "ලංකා කෙයාර් රෝහලේදී වෛද්‍යවරයෙකු වෙන්කරන්න, ඔබේ අංකය සජීවීව බලන්න, මාර්ගගතව උපදෙස් ගන්න — සියල්ල එක තැනකින්.",
+  "Passwords are hashed with bcrypt, never stored in plain text.": "මුරපද bcrypt මගින් සුරක්ෂිත කෙරේ; සරල අකුරින් කිසිවිට ගබඩා නොකරයි.",
+  "Personal and medical data is encrypted with AES-256-GCM.": "පෞද්ගලික සහ වෛද්‍ය දත්ත AES-256-GCM මගින් සංකේතනය කෙරේ.",
+  "Sessions use signed tokens in HTTP-only, Secure cookies.": "ඇතුල්වීම් සැසි HTTP-only, Secure කුකී තුළ අත්සන් කළ ටෝකන් භාවිතා කරයි.",
+  "Emergency? Call 1990": "හදිසි අවස්ථාවක්ද? 1990 අමතන්න",
+  "Patients": "රෝගීන්",
+  "Hospital staff": "රෝහල් කාර්ය මණ්ඩලය",
+  "Doctor console": "වෛද්‍ය කොන්සෝලය",
+  "Administration": "පරිපාලනය",
+  "Book a doctor, follow your queue live and consult online, all in one place at Lanka Care Hospital, Colombo.": "ලංකා කෙයාර් රෝහලේදී (කොළඹ) වෛද්‍යවරයෙකු වෙන්කරන්න, ඔබේ පෝලිම සජීවීව බලන්න, මාර්ගගතව උපදෙස් ගන්න — සියල්ල එක තැනකින්.",
+  "Medical data is encrypted and visible only to you and your doctor.": "වෛද්‍ය දත්ත සංකේතනය කර ඇති අතර ඒවා පෙනෙන්නේ ඔබට සහ ඔබේ වෛද්‍යවරයාට පමණි.",
+  "Book: Dr. Nadeesha Wijesinghe": "වෙන්කරන්න: Dr. Nadeesha Wijesinghe",
+  "Reference or name": "යොමුව හෝ නම",
+  "e.g. Wijesinghe": "උදා: Wijesinghe",
+  "Booking closes 16:00 (1 h before)": "වෙන්කිරීම් වසන වේලාව 16:00 (පැය 1කට පෙර)",
+  "Booking closes 18:00 (30 min before)": "වෙන්කිරීම් වසන වේලාව 18:00 (මිනිත්තු 30කට පෙර)",
+  "Video-free chat room": "වීඩියෝ රහිත චැට් කාමරය"
 };
-function chk(el){const m=V[el.dataset.v](el.value,el.form)||'',[s,k]=el.id.split('-');el.setAttribute('aria-invalid',m?'true':'false');$(s+'-e_'+k).textContent=m;return!m}
-const allOk=f=>[...f.querySelectorAll('[data-v]')].map(chk).every(Boolean);
-const showErr=(id,t)=>{const b=$(id);b.textContent=t;b.hidden=false};
-document.addEventListener('focusout',e=>{if(e.target.dataset&&e.target.dataset.v)chk(e.target)});
-document.addEventListener('input',e=>{const t=e.target;
- if(t.dataset&&t.dataset.v&&t.getAttribute('aria-invalid')==='true')chk(t);
- if(t.id==='register-pw'){const n=[t.value.length>=8,/[A-Za-z]/.test(t.value),/\d/.test(t.value),/[^A-Za-z0-9]/.test(t.value)].filter(Boolean).length,i=$('register-st');i.style.width=n*25+'%';i.parentElement.classList.toggle('w',n<4)}});
-document.addEventListener('click',e=>{
- const b=e.target.closest('[data-show]');
- if(b){const i=$(b.closest('[data-view]').dataset.view+'-'+b.dataset.show);i.type=i.type==='password'?'text':'password';b.textContent=i.type==='password'?'Show':'Hide'}
- if(e.target.closest('[data-out]')){const button=e.target.closest('[data-out]');button.disabled=true;post('/api/auth/logout').then(response=>{if(!response.ok)throw new Error('Logout failed');S=null;setAppMessage('');render();nav('welcome')}).catch(()=>{button.disabled=false;setAppMessage('Unable to log out. Please try again.')});return}
- if(e.target.closest('[data-wake-retry]')){void wakeBackend();return}
- const s=e.target.closest('[data-panel-link]');
- if(s){e.preventDefault();activatePanel(s.closest('[data-view]'),s)}
-});
-$('login-f').onsubmit=async e=>{e.preventDefault();const f=e.target;$('login-err').hidden=true;$('login-ok').hidden=true;if(!allOk(f))return;try{const r=await post('/api/auth/login',{email:f.email.value.trim(),password:f.password.value});const result=await r.json().catch(()=>({}));if(!r.ok)return showErr('login-err',result.message||'That email or password doesn’t look right. Please try again.');if(!result.user||!HOME[result.user.role])return showErr('login-err','The login service returned an unexpected response.');login({role:result.user.role,name:result.user.email||'Signed in'});}catch{showErr('login-err','Unable to reach the login service. Please try again later.')}}; $('register-f').onsubmit=async e=>{e.preventDefault();const f=e.target;$('register-err').hidden=true;if(!allOk(f))return;const d=Object.fromEntries(new FormData(f));const name=String(d.name||'').trim().split(/\s+/);const firstName=name.shift()||'';const lastName=name.join(' ');if(!firstName||!lastName)return showErr('register-err','Enter your first and last name.');try{const r=await post('/api/auth/register',{firstName,lastName,email:d.email,password:d.password,confirmPassword:d.confirm,nic:d.nic,dateOfBirth:d.dob,gender:d.gender,phone:d.phone});const result=await r.json().catch(()=>({}));if(r.status===202)return showErr('register-err',result.message||'Your account is awaiting activation.');if(!r.ok)return showErr('register-err',result.message||'We couldn’t create your account. Please check your details and try again.');if(result.profileCreated!==true)return showErr('register-err',result.message||'Your account was created, but the patient profile is incomplete.');flash='Your account and patient profile are ready. Please log in.';f.reset();nav('login')}catch{showErr('register-err','Unable to reach the registration service. Please try again later.')}}; $('register-dob').max=new Date().toISOString().slice(0,10);
-addEventListener('hashchange',go);
-addEventListener('pageshow',event=>{if(event.persisted)void wakeBackend()});
-addEventListener('online',()=>void wakeBackend());
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void wakeBackend()});
 
-let lang='en';try{lang=localStorage.getItem('mc-lang')||'en'}catch{}
-const D={"Choose a doctor and a time. Get your number instantly.": "වෛද්‍යවරයෙකු සහ වේලාවක් තෝරන්න. ඔබේ අංකය වහාම ලබාගන්න.", "See who is being called now. We’ll alert you when your turn is near.": "දැන් අමතන්නේ කාවදැයි බලන්න. ඔබේ වාරය ළඟා වූ විට අපි දැනුම් දෙන්නෙමු.", "Your health details are encrypted. Only you and your doctor can read them.": "ඔබේ සෞඛ්‍ය තොරතුරු සංකේතනය කර ඇත. කියවිය හැක්කේ ඔබට සහ ඔබේ වෛද්‍යවරයාට පමණි.","Welcome to Lanka Care Hospital, Colombo": "ලංකා කෙයාර් රෝහල, කොළඹ වෙත සාදරයෙන් පිළිගනිමු", "We’re glad you’re here. Book a visit, follow your number live, or chat with your doctor online, so you spend less time waiting and more time feeling better.": "ඔබ අප වෙත පැමිණීම ගැන සතුටුයි. වෙන්කිරීමක් කරන්න, ඔබේ අංකය සජීවීව බලන්න, නැතහොත් වෛද්‍යවරයා සමඟ මාර්ගගතව කතා කරන්න; බලා සිටීමට අඩුවෙන් සහ සුවය ලැබීමට වැඩි කාලයක් වැය කරන්න.", "Create a free account": "නොමිලේ ගිණුමක් සාදන්න", "— it only takes a minute.": "— එයට මිනිත්තුවක් පමණක් ගත වේ.","Your doctor,": "ඔබේ වෛද්‍යවරයා,", "one tap away": "එක ස්පර්ශයකින්", "Free to join": "නොමිලේ සම්බන්ධ වන්න", "Encrypted data": "සංකේතනය කළ දත්ත", "No phone queues": "දුරකථන පෝලිම් නැත", "How it works": "එය ක්‍රියා කරන ආකාරය", "Three simple steps to see your doctor.": "වෛද්‍යවරයා හමුවීමට සරල පියවර තුනක්.", "✓ Booked · #14": "✓ වෙන්කළා · #14", "Booked · #14": "වෙන්කළා · #14","Visiting doctors": "පැමිණෙන වෛද්‍යවරු", "Specialisations": "විශේෂත්වයන්", "Sessions every week": "සතියකට සැසි","You’re booked in!": "වෙන්කිරීම සාර්ථකයි!", "Doctor is seeing patients now": "වෛද්‍යවරයා දැන් රෝගීන් බලමින් සිටී", "Now calling": "දැන් අමතන අංකය", "4 people ahead of you": "ඔබට පෙර පුද්ගලයන් 4ක්", "Your estimated time": "ඔබේ ඇස්තමේන්තු වේලාව", "Your turn is expected around 19:10. We’ll let you know when you’re 3 numbers away, and again when the doctor calls you.": "ඔබේ වාරය 19:10 පමණ වනු ඇත. ඔබට අංක 3ක් තිබෙන විටත්, වෛද්‍යවරයා ඔබව ඇමතූ විටත් අපි දැනුම් දෙන්නෙමු.", "Your visits, past and upcoming": "ඔබේ පසුගිය සහ ඉදිරි හමුවීම්", "Booking ref": "වෙන්කිරීමේ යොමුව", "When": "කවදාද", "Visit type": "හමුවීමේ වර්ගය", "Not paid yet": "තවම ගෙවා නැත", "Too late to cancel": "අවලංගු කිරීමට ප්‍රමාදයි", "Cancelled, kept in your history": "අවලංගු කළා; ඔබේ ඉතිහාසයේ තබා ඇත", "View summary & leave feedback": "සාරාංශය බලා ප්‍රතිචාර දෙන්න", "Cancel booking": "වෙන්කිරීම අවලංගු කරන්න", "You can cancel an unpaid appointment up to 3 hours before it starts. Cancelled appointments stay in your history.": "නොගෙවූ වෙන්කිරීමක් ආරම්භයට පැය 3කට පෙර දක්වා අවලංගු කළ හැක. අවලංගු කළ වෙන්කිරීම් ඔබේ ඉතිහාසයේ රැඳේ.", "Reference": "යොමුව", "Your reference is MC-20261109-0142. Your number is #14, and the doctor should see you around 19:10.": "ඔබේ යොමු අංකය MC-20261109-0142 ය. ඔබේ අංකය #14 වන අතර වෛද්‍යවරයා ඔබව බලන්නේ 19:10 පමණය.","Welcome": "සාදරයෙන් පිළිගනිමු", "Lanka Care Hospital, Colombo": "ලංකා කෙයාර් රෝහල, කොළඹ", "Your doctor, one tap away": "ඔබේ වෛද්‍යවරයා, එක ස්පර්ශයකින්", "Book a visit, follow your number live, or chat with your doctor online. No more waiting on the phone or in long queues.": "වෙන්කිරීමක් කරන්න, ඔබේ අංකය සජීවීව බලන්න, නැතහොත් වෛද්‍යවරයා සමඟ මාර්ගගතව කතා කරන්න. දුරකථනයේ හෝ දිගු පෝලිම්වල බලා සිටීම අවසන්.", "New here?": "මෙහි අලුත්ද?", "Book in minutes": "මිනිත්තු කිහිපයකින් වෙන්කරන්න", "Pick a doctor, choose a time and get your number straight away.": "වෛද්‍යවරයෙකු සහ වේලාවක් තෝරා ඔබේ අංකය වහාම ලබාගන්න.", "Follow your queue": "ඔබේ පෝලිම බලන්න", "See who is being served now and get a nudge when your turn is near.": "දැන් අමතන්නේ කාවදැයි බලන්න; ඔබේ වාරය ළඟා වූ විට දැනුම්දීමක් ලබාගන්න.", "Safe and private": "ආරක්ෂිත සහ පෞද්ගලිකයි", "Your health details are encrypted and only you and your doctor can read them.": "ඔබේ සෞඛ්‍ය තොරතුරු සංකේතනය කර ඇති අතර කියවිය හැක්කේ ඔබට සහ ඔබේ වෛද්‍යවරයාට පමණි.","Find doctors": "වෛද්‍යවරුන් සොයන්න", "My appointments": "මගේ වෙන්කිරීම්", "Consultation": "වෛද්‍ය උපදේශනය", "Doctor": "වෛද්‍ය", "Manager": "කළමනාකරු", "Admin": "පරිපාලක", "Log in": "ඇතුල් වන්න", "Register": "ලියාපදිංචි වන්න", "Log out": "පිටවන්න", "Customer": "රෝගියා", "Find a doctor": "වෛද්‍යවරයෙකු සොයන්න", "Lanka Care Hospital, Colombo · all times Asia/Colombo": "ලංකා කෙයාර් රෝහල, කොළඹ · සියලු වේලාවන් ආසියා/කොළඹ", "Doctor name": "වෛද්‍යවරයාගේ නම", "Specialisation": "විශේෂත්වය", "Date": "දිනය", "Session type": "සැසි වර්ගය", "All": "සියල්ල", "Cardiology": "හෘද රෝග", "Neurology": "ස්නායු රෝග", "Paediatrics": "ළමා රෝග", "Physical": "රෝහලේදී", "Online": "මාර්ගගත", "Search sessions": "සැසි සොයන්න", "Availability updates when anyone books or cancels": "ඕනෑම කෙනෙක් වෙන්කළ හෝ අවලංගු කළ විට ඉතිරි ස්ථාන සජීවීව යාවත්කාලීන වේ", "Spots left (live)": "ඉතිරි ස්ථාන (සජීවී)", "Book": "වෙන්කරන්න", "Session full": "සැසිය පිරී ඇත", "No spots left": "ස්ථාන ඉතිරි නැත", "What would you like to see the doctor about?": "ඔබ වෛද්‍යවරයා හමුවීමට කැමති කුමක් සඳහාද?", "Please tell us a little about why you’re visiting.": "ඔබ පැමිණෙන්නේ ඇයිදැයි කෙටියෙන් අපට කියන්න.", "You’ll get your queue number as soon as you book, and it’s yours alone. Your estimated time depends on your number and any delays.": "වෙන්කළ විගස ඔබට පෝලිම් අංකයක් ලැබේ; එය ඔබට පමණක් වෙන්වේ. ඔබේ ඇස්තමේන්තු වේලාව රඳා පවතින්නේ ඔබේ අංකය සහ ප්‍රමාදයන් මතය.", "Confirm my booking": "මගේ වෙන්කිරීම තහවුරු කරන්න", "To finish booking, please log in or create a free account.": "වෙන්කිරීම අවසන් කිරීමට කරුණාකර ඇතුල් වන්න, නැතහොත් නොමිලේ ගිණුමක් සාදන්න.", "Upcoming and past": "ඉදිරි සහ පසුගිය", "Reference": "යොමුව", "Session": "සැසිය", "Type": "වර්ගය", "Status": "තත්ත්වය", "Payment": "ගෙවීම", "Booked": "වෙන්කළා", "Pending": "පොරොත්තුවෙන්", "Completed": "අවසන්", "Cancelled": "අවලංගුයි", "Cancel": "අවලංගු කරන්න", "Now serving": "දැන් අමතන අංකය", "Your number": "ඔබේ අංකය", "Est. time": "ඇස්තමේන්තු වේලාව", "Session in progress": "සැසිය පවතී", "Summary & feedback": "සාරාංශය සහ ප්‍රතිචාර", "Kept on record": "වාර්තාවේ තබා ඇත", "Cancel closed (BR-07)": "අවලංගු කිරීම වසා ඇත", "Unpaid appointments can be cancelled until 3 hours before the session. Cancelled appointments stay in your history.": "නොගෙවූ වෙන්කිරීම් සැසියට පැය 3කට පෙර දක්වා අවලංගු කළ හැක. අවලංගු කළ වෙන්කිරීම් ඔබේ ඉතිහාසයේ රැඳේ.", "Today’s sessions": "අද සැසි", "Patient list": "රෝගී ලැයිස්තුව", "Notes": "සටහන්", "Patients in this session": "මෙම සැසියේ රෝගීන්", "No.": "අංකය", "Patient": "රෝගියා", "Check-in": "පැමිණීම", "Start session": "සැසිය අරඹන්න", "End session": "සැසිය අවසන් කරන්න", "Complete": "අවසන් කරන්න", "No-show": "නොපැමිණියා", "Waiting": "බලා සිටින", "In consultation": "උපදේශනයේ", "In progress": "පවතී", "Arrived": "පැමිණියා", "Not arrived": "පැමිණ නැත", "Next": "ඊළඟ", "Diagnosis summary": "රෝග විනිශ්චය සාරාංශය", "Advice and prescription": "උපදෙස් සහ වට්ටෝරුව", "Save notes": "සටහන් සුරකින්න", "Reason for visit": "පැමිණීමේ හේතුව", "Online consultation": "මාර්ගගත උපදේශනය", "Private chat": "පෞද්ගලික චැට්", "Connected": "සම්බන්ධයි", "Message (max 1000 characters)": "පණිවිඩය (උපරිම අක්ෂර 1000)", "Send": "යවන්න", "End consultation": "උපදේශනය අවසන් කරන්න", "Doctor’s summary": "වෛද්‍යවරයාගේ සාරාංශය", "Consultation summary": "උපදේශන සාරාංශය", "Print summary & prescription": "සාරාංශය සහ වට්ටෝරුව මුද්‍රණය කරන්න", "Feedback": "ප්‍රතිචාර", "Rating (1–5)": "ශ්‍රේණිගත කිරීම (1–5)", "Comment": "අදහස", "Submit feedback": "ප්‍රතිචාර යවන්න", "Manager dashboard": "කළමනාකරු උපකරණ පුවරුව", "Dashboard": "උපකරණ පුවරුව", "Sessions": "සැසි", "Reception": "පිළිගැනීම", "Notices and feedback": "දැන්වීම් සහ ප්‍රතිචාර", "Book for walk-in patient": "පැමිණි රෝගියෙකු සඳහා වෙන්කරන්න", "Sessions today": "අද සැසි ගණන", "Appointments": "වෙන්කිරීම්", "Physical / online": "රෝහලේදී / මාර්ගගත", "No-show rate": "නොපැමිණීමේ අනුපාතය", "Revenue": "ආදායම", "Time": "වේලාව", "Room": "කාමරය", "Delay": "ප්‍රමාද කරන්න", "Edit": "සංස්කරණය", "Open": "විවෘතයි", "Search today’s appointments": "අද වෙන්කිරීම් සොයන්න", "Mark arrived": "පැමිණියා ලෙස සලකුණු කරන්න", "Record payment": "ගෙවීම සටහන් කරන්න", "Publish notice": "දැන්වීමක් පළ කරන්න", "Approve": "අනුමත කරන්න", "Hide": "සඟවන්න", "Show": "පෙන්වන්න", "System administration": "පද්ධති පරිපාලනය", "System dashboard": "පද්ධති උපකරණ පුවරුව", "Active accounts": "සක්‍රීය ගිණුම්", "Doctors": "වෛද්‍යවරු", "Managers": "කළමනාකරුවෝ", "Failed logins today": "අද අසාර්ථක ඇතුල්වීම්", "Staff accounts": "කාර්ය මණ්ඩල ගිණුම්", "Name": "නම", "Email": "විද්‍යුත් තැපෑල", "Role": "භූමිකාව", "Active": "සක්‍රීය", "Inactive": "අක්‍රීය", "Deactivate": "අක්‍රීය කරන්න", "Activate": "සක්‍රීය කරන්න", "Reset password": "මුරපදය යළි පිහිටුවන්න", "Create staff account": "කාර්ය මණ්ඩල ගිණුමක් සාදන්න", "Full name": "සම්පූර්ණ නම", "Create account": "ගිණුම සාදන්න", "A temporary password is issued and must be changed at first login.": "තාවකාලික මුරපදයක් ලැබේ; පළමු ඇතුල්වීමේදී එය වෙනස් කළ යුතුය.", "Audit log": "විගණන සටහන", "Action": "ක්‍රියාව", "User": "පරිශීලක", "IP": "IP", "Welcome back": "නැවත සාදරයෙන් පිළිගනිමු", "Log in to book and manage your appointments.": "වෙන්කිරීම් කිරීමට සහ කළමනාකරණයට ඇතුල් වන්න.", "Password": "මුරපදය", "New patient?": "අලුත් රෝගියෙක්ද?", "Create an account": "ගිණුමක් සාදන්න", "Doctor and manager accounts are created by the hospital IT administrator.": "වෛද්‍ය සහ කළමනාකරු ගිණුම් සාදන්නේ රෝහලේ තොරතුරු තාක්ෂණ පරිපාලකයා විසිනි.", "That email or password doesn’t look right. Please try again.": "එම විද්‍යුත් තැපෑල හෝ මුරපදය නිවැරදි නැත. කරුණාකර නැවත උත්සාහ කරන්න.", "Too many wrong attempts. For your safety, please try again in 15 minutes.": "වැරදි උත්සාහ ඉතා වැඩියි. ඔබේ ආරක්ෂාව සඳහා මිනිත්තු 15කින් නැවත උත්සාහ කරන්න.", "Create your account": "ඔබේ ගිණුම සාදන්න", "Create a free patient account to start booking.": "වෙන්කිරීම් ආරම්භ කිරීමට නොමිලේ රෝගී ගිණුමක් සාදන්න.", "NIC": "ජාතික හැඳුනුම්පත් අංකය", "Date of birth": "උපන් දිනය", "Gender": "ස්ත්‍රී/පුරුෂ භාවය", "Choose": "තෝරන්න", "Female": "ගැහැණු", "Male": "පිරිමි", "Other": "වෙනත්", "Phone": "දුරකථනය", "Address": "ලිපිනය", "Confirm password": "මුරපදය තහවුරු කරන්න", "Already registered?": "දැනටමත් ලියාපදිංචිද?", "You’re all set! Your account is ready. Please log in.": "සියල්ල සූදානම්! ඔබේ ගිණුම සාදා ඇත. කරුණාකර ඇතුල් වන්න.", "There’s already an account with this email or NIC. Try logging in instead.": "මෙම විද්‍යුත් තැපෑල හෝ හැඳුනුම්පත් අංකයෙන් දැනටමත් ගිණුමක් ඇත. ඒ වෙනුවට ඇතුල් වීමට උත්සාහ කරන්න.", "We couldn’t create your account just now. Please check your details and try again.": "ඔබේ ගිණුම දැන් සෑදීමට නොහැකි විය. විස්තර පරීක්ෂා කර නැවත උත්සාහ කරන්න.", "Please enter your full name.": "කරුණාකර ඔබේ සම්පූර්ණ නම ඇතුල් කරන්න.", "That NIC doesn’t look right. Use 9 digits + V/X, or 12 digits.": "එම හැඳුනුම්පත් අංකය නිවැරදි නැත. ඉලක්කම් 9 + V/X, හෝ ඉලක්කම් 12 භාවිතා කරන්න.", "Please choose your date of birth.": "කරුණාකර ඔබේ උපන් දිනය තෝරන්න.", "Please enter your phone number like 07XXXXXXXX.": "කරුණාකර දුරකථන අංකය 07XXXXXXXX ආකාරයට ඇතුල් කරන්න.", "Please enter a valid email address.": "කරුණාකර වලංගු විද්‍යුත් තැපැල් ලිපිනයක් ඇතුල් කරන්න.", "Please enter your address.": "කරුණාකර ඔබේ ලිපිනය ඇතුල් කරන්න.", "Use at least 12 characters, with a letter, a number and a symbol.": "අවම අක්ෂර 8ක්, අකුරක්, ඉලක්කමක් සහ සංකේතයක් සමඟ භාවිතා කරන්න.", "The passwords don’t match yet.": "මුරපද තවම ගැළපෙන්නේ නැත.", "Please fill this in.": "කරුණාකර මෙය පුරවන්න.", "Skip the phone queue.": "දුරකථන පෝලිම මඟහරින්න.", "Book a doctor, follow your number live and consult online, all in one place at Lanka Care Hospital.": "ලංකා කෙයාර් රෝහලේදී වෛද්‍යවරයෙකු වෙන්කරන්න, ඔබේ අංකය සජීවීව බලන්න, මාර්ගගතව උපදෙස් ගන්න — සියල්ල එක තැනකින්.", "Passwords are hashed with bcrypt, never stored in plain text.": "මුරපද bcrypt මගින් සුරක්ෂිත කෙරේ; සරල අකුරින් කිසිවිට ගබඩා නොකරයි.", "Personal and medical data is encrypted with AES-256-GCM.": "පෞද්ගලික සහ වෛද්‍ය දත්ත AES-256-GCM මගින් සංකේතනය කෙරේ.", "Sessions use signed tokens in HTTP-only, Secure cookies.": "ඇතුල්වීම් සැසි HTTP-only, Secure කුකී තුළ අත්සන් කළ ටෝකන් භාවිතා කරයි.", "Emergency? Call 1990": "හදිසි අවස්ථාවක්ද? 1990 අමතන්න", "Patients": "රෝගීන්", "Hospital staff": "රෝහල් කාර්ය මණ්ඩලය", "Doctor console": "වෛද්‍ය කොන්සෝලය", "Administration": "පරිපාලනය", "Book a doctor, follow your queue live and consult online, all in one place at Lanka Care Hospital, Colombo.": "ලංකා කෙයාර් රෝහලේදී (කොළඹ) වෛද්‍යවරයෙකු වෙන්කරන්න, ඔබේ පෝලිම සජීවීව බලන්න, මාර්ගගතව උපදෙස් ගන්න — සියල්ල එක තැනකින්.", "Medical data is encrypted and visible only to you and your doctor.": "වෛද්‍ය දත්ත සංකේතනය කර ඇති අතර ඒවා පෙනෙන්නේ ඔබට සහ ඔබේ වෛද්‍යවරයාට පමණි.", "Book: Dr. Nadeesha Wijesinghe": "වෙන්කරන්න: Dr. Nadeesha Wijesinghe", "Reference or name": "යොමුව හෝ නම", "e.g. Wijesinghe": "උදා: Wijesinghe", "Booking closes 16:00 (1 h before)": "වෙන්කිරීම් වසන වේලාව 16:00 (පැය 1කට පෙර)", "Booking closes 18:00 (30 min before)": "වෙන්කිරීම් වසන වේලාව 18:00 (මිනිත්තු 30කට පෙර)", "Video-free chat room": "වීඩියෝ රහිත චැට් කාමරය"};
-const L=s=>lang==='si'&&D[s]||s;
-function tx(n){const t=n.data.trim();if(!t)return;let en=n.__en;if(en===undefined||(t!==en.trim()&&t!==n.__si))en=n.__en=n.data;
- const r=lang==='si'&&D[en.trim()];n.__si=r||undefined;const o=r?en.replace(en.trim(),r):en;if(n.data!==o)n.data=o}
-function at(el){for(const a of['placeholder','aria-label','data-label']){if(!el.hasAttribute(a))continue;const k='_'+a,c=el.getAttribute(a);if(el[k]===undefined||(c!==el[k]&&c!==el[k+'s']))el[k]=c;const r=lang==='si'&&D[el[k]];el[k+'s']=r||undefined;const o=r||el[k];if(c!==o)el.setAttribute(a,o)}}
-function apply(root){const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName)?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT}),a=[];while(w.nextNode())a.push(w.currentNode);a.forEach(tx);root.querySelectorAll('[placeholder],[aria-label],[data-label]').forEach(at)}
-const lb=document.createElement('button');lb.id='lang-btn';lb.type='button';lb.className='fixed bottom-4 right-4 z-50 px-4 py-2 rounded-full bg-white border border-line shadow-lg text-sm font-semibold text-brand cursor-pointer hover:bg-snow';document.body.appendChild(lb);
-function setLang(l){lang=l;try{localStorage.setItem('mc-lang',l)}catch{}document.documentElement.lang=l==='si'?'si':'en';lb.textContent=l==='si'?'English':'සිංහල';lb.setAttribute('aria-label',l==='si'?'Switch to English':'සිංහලට මාරු වන්න');
- apply(document.body);document.querySelectorAll('[data-v][aria-invalid="true"]').forEach(chk);const v=views.find(x=>!x.hidden);if(v)document.title=L(v.dataset.title)+' · MediChannel'}
-lb.onclick=()=>setLang(lang==='si'?'en':'si');
-new MutationObserver(ms=>{for(const m of ms){if(m.type==='characterData')tx(m.target);else m.addedNodes.forEach(n=>n.nodeType===3?tx(n):n.nodeType===1&&apply(n))}}).observe(document.body,{childList:true,subtree:true,characterData:true});
-setLang(lang);
-bootTimer=setTimeout(()=>{if(document.body.dataset.appReady==='true')return;bootTimer=null;document.body.dataset.appReady='true';setAppMessage('The session check is taking longer than expected. Please sign in again if needed.');render();go()},15000);
-void wakeBackend();void initializeApp();
+  const L = (value) => (lang === "si" && D[value]) || value;
+
+  function tx(node) {
+    const text = node.data.trim();
+    if (!text) return;
+
+    let english = node.__en;
+
+    if (
+      english === undefined ||
+      (text !== english.trim() && text !== node.__si)
+    ) {
+      english = node.__en = node.data;
+    }
+
+    const translated = lang === "si" && D[english.trim()];
+    node.__si = translated || undefined;
+
+    const next = translated
+      ? english.replace(english.trim(), translated)
+      : english;
+
+    if (node.data !== next) node.data = next;
+  }
+
+  function attributeTranslate(element) {
+    ["placeholder", "aria-label", "data-label"].forEach((attribute) => {
+      if (!element.hasAttribute(attribute)) return;
+
+      const key = "_" + attribute;
+      const current = element.getAttribute(attribute);
+
+      if (
+        element[key] === undefined ||
+        (current !== element[key] && current !== element[key + "s"])
+      ) {
+        element[key] = current;
+      }
+
+      const translated = lang === "si" && D[element[key]];
+      element[key + "s"] = translated || undefined;
+
+      const next = translated || element[key];
+
+      if (current !== next) element.setAttribute(attribute, next);
+    });
+  }
+
+  function applyLocalisation(root) {
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) =>
+          /^(SCRIPT|STYLE)$/.test(node.parentNode.nodeName)
+            ? NodeFilter.FILTER_REJECT
+            : NodeFilter.FILTER_ACCEPT,
+      }
+    );
+
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    nodes.forEach(tx);
+
+    root
+      .querySelectorAll("[placeholder],[aria-label],[data-label]")
+      .forEach(attributeTranslate);
+  }
+
+  languageButton = document.createElement("button");
+  languageButton.id = "lang-btn";
+  languageButton.type = "button";
+  languageButton.className =
+    "fixed bottom-4 right-4 z-50 px-4 py-2 rounded-full bg-white border border-line shadow-lg text-sm font-semibold text-brand cursor-pointer hover:bg-snow";
+  document.body.appendChild(languageButton);
+
+  function setLang(next) {
+    lang = next;
+
+    try {
+      localStorage.setItem("mc-lang", next);
+    } catch {
+      // Ignore.
+    }
+
+    document.documentElement.lang = next === "si" ? "si" : "en";
+    languageButton.textContent = next === "si" ? "English" : "සිංහල";
+    languageButton.setAttribute(
+      "aria-label",
+      next === "si" ? "Switch to English" : "සිංහලට මාරු වන්න"
+    );
+
+    applyLocalisation(document.body);
+
+    document
+      .querySelectorAll('[data-v][aria-invalid="true"]')
+      .forEach(chk);
+
+    const visibleView = views.find((view) => !view.hidden);
+    if (visibleView) {
+      document.title = L(visibleView.dataset.title) + " · MediChannel";
+    }
+  }
+
+  languageButton.addEventListener("click", () => {
+    setLang(lang === "si" ? "en" : "si");
+  });
+
+  new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === "characterData") {
+        tx(mutation.target);
+        return;
+      }
+
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === 3) tx(node);
+        else if (node.nodeType === 1) applyLocalisation(node);
+      });
+    });
+  }).observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+
+  setLang(lang);
+
+  // ---------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------
+
+  async function initializeApp() {
+    let unavailable = false;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await MC.me();
+
+        if (!result) {
+          S = null;
+          break;
+        }
+
+        if (result.user) {
+          setSession(result.user);
+          break;
+        }
+
+        unavailable = true;
+      } catch {
+        unavailable = true;
+      }
+
+      if (attempt < 2) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, attempt === 0 ? 1000 : 3000)
+        );
+      }
+    }
+
+    if (bootTimer) {
+      clearTimeout(bootTimer);
+      bootTimer = null;
+    }
+
+    document.body.dataset.appReady = "true";
+
+    if (unavailable && !S) {
+      setAppMessage(
+        "We could not verify your session. Please sign in again or retry."
+      );
+    }
+
+    render();
+
+    const target = resolveView(parseHash());
+    showView(target.id, target.panel, { force: true });
+
+    if (target.consultId) {
+      state.consult.requestedId = target.consultId;
+      if (activeView === "consult") void loadConsultationPicker();
+    }
+  }
+
+  bootTimer = setTimeout(() => {
+    if (document.body.dataset.appReady === "true") return;
+
+    bootTimer = null;
+    document.body.dataset.appReady = "true";
+    setAppMessage(
+      "The session check is taking longer than expected. Please sign in again if needed."
+    );
+    render();
+    const target = resolveView(parseHash());
+    showView(target.id, target.panel, { force: true });
+  }, 15000);
+
+  void wakeBackend();
+  void initializeApp();
+})();
