@@ -617,6 +617,12 @@
       void loadAdminRooms();
       void loadAdminStats();
       void loadAuditLogs();
+      subscribeAdminAuditLogs();
+      if (!state.auditLogTimer) {
+        state.auditLogTimer = setInterval(() => {
+          if (activeView === "admin") void loadAuditLogs();
+        }, 6000);
+      }
     } else if (id === "manager") {
       void loadStaffAccounts();
       void loadManagerSessionPicker();
@@ -936,10 +942,12 @@
       const items = await MC.notifications();
       if (!Array.isArray(items)) return;
       const unread = items.filter((n) => !n.read);
+      const isInitial = !state.notificationsLoaded;
+      state.notificationsLoaded = true;
       const prevCount = (state.notifications || []).filter((n) => !n.read).length;
       state.notifications = items;
-      if (unread.length > prevCount && unread.length > 0) {
-        const latest = unread[unread.length - 1];
+      if (!isInitial && unread.length > prevCount && unread.length > 0) {
+        const latest = unread[0] || unread[unread.length - 1];
         showNotificationToast(latest);
       }
       renderNotificationBadge(unread.length);
@@ -3046,10 +3054,11 @@
     const log = document.querySelector("[data-chat-log]");
     if (!log) return;
 
-    log.replaceChildren();
+    log.style.opacity = "0.7";
 
     try {
       const messages = await MC.chatHistory(appointmentId);
+      log.replaceChildren();
 
       if (!Array.isArray(messages) || !messages.length) {
         log.append(
@@ -3065,7 +3074,10 @@
       messages.forEach((message) => appendChatMessage(message));
       log.scrollTop = log.scrollHeight;
     } catch (error) {
+      log.replaceChildren();
       log.append(el("p", "text-sm text-bad", error.message));
+    } finally {
+      log.style.opacity = "1";
     }
   }
 
@@ -3246,13 +3258,10 @@
     const feedback = document.querySelector("[data-feedback-form]");
     const line = document.querySelector("[data-consult-summary-line]");
 
-    if (summary) summary.hidden = true;
-    if (empty) empty.hidden = false;
-
     const appointment = state.consult.appointment;
 
     if (feedback) {
-      feedback.hidden = !(S.role === "CUSTOMER" && appointment &&
+      feedback.hidden = !(S && S.role === "CUSTOMER" && appointment &&
         appointment.status === "COMPLETED");
     }
 
@@ -3266,6 +3275,9 @@
     try {
       const record = await MC.summary(appointmentId);
       if (!record) {
+        state.consult.summary = null;
+        if (summary) summary.hidden = true;
+        if (empty) empty.hidden = false;
         updateDoctorConsultSummaryBox(null);
         return;
       }
@@ -3297,11 +3309,15 @@
       }
       updateDoctorConsultSummaryBox(record);
     } catch (error) {
-      updateDoctorConsultSummaryBox(null);
-      if (error.status !== 404 && empty) {
+      state.consult.summary = null;
+      if (summary) summary.hidden = true;
+      if (empty) {
         empty.hidden = false;
-        empty.textContent = error.message;
+        empty.textContent = error.status === 404
+          ? "The summary appears here after the doctor completes the consultation."
+          : (error.message || "Something went wrong. Please try again.");
       }
+      updateDoctorConsultSummaryBox(null);
     }
   }
 
@@ -3601,6 +3617,66 @@
     }
   }
 
+  function renderAuditLogRow(log) {
+    const tr = document.createElement("tr");
+
+    let roleBadge = "";
+    if (log.userRole === "ADMIN") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 ml-1">ADMIN</span>';
+    } else if (log.userRole === "MANAGER") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 ml-1">MANAGER</span>';
+    } else if (log.userRole === "DOCTOR") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 ml-1">DOCTOR</span>';
+    } else if (log.userRole === "CUSTOMER") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 ml-1">PATIENT</span>';
+    }
+
+    let actionClass = "font-medium text-slate2";
+    const act = (log.action || "").toLowerCase();
+    if (act.includes("created")) actionClass = "font-semibold text-emerald-700";
+    if (act.includes("cancelled")) actionClass = "font-semibold text-rose-700";
+    if (act.includes("delayed")) actionClass = "font-semibold text-amber-700";
+    if (act.includes("locked")) actionClass = "font-semibold text-rose-800";
+
+    let timeStr = "—";
+    if (log.createdAt) {
+      const d = new Date(log.createdAt);
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = months[d.getMonth()];
+      const hours = String(d.getHours()).padStart(2, "0");
+      const mins = String(d.getMinutes()).padStart(2, "0");
+      timeStr = `${day} ${month} ${hours}:${mins}`;
+    }
+
+    tr.innerHTML = `
+      <td data-label="Time" class="whitespace-nowrap text-xs text-mute font-mono">${timeStr}</td>
+      <td data-label="User" class="text-sm font-medium text-ink">${escapeHtml(log.userEmail || "System")}${roleBadge}</td>
+      <td data-label="Action" class="text-sm ${actionClass}">${escapeHtml(log.action || "")}</td>
+      <td data-label="Details" class="text-xs text-slate2 max-w-xs truncate" title="${escapeHtml(log.details || "")}">${escapeHtml(log.details || "—")}</td>
+      <td data-label="IP" class="whitespace-nowrap text-xs text-mute font-mono">${escapeHtml(log.ipAddress || "127.0.0.1")}</td>
+    `;
+    return tr;
+  }
+
+  function subscribeAdminAuditLogs() {
+    if (!S || (S.role !== "ADMIN" && S.role !== "MANAGER")) return;
+    subscribe("admin-audit-logs", "/topic/audit-logs", (log) => {
+      const tbody = document.querySelector("[data-admin-audit-tbody]");
+      if (!tbody) return;
+      const emptyRow = tbody.querySelector("td[colspan]");
+      if (emptyRow) emptyRow.closest("tr").remove();
+
+      const tr = renderAuditLogRow(log);
+      tr.style.backgroundColor = "rgba(254, 243, 199, 0.75)";
+      tr.style.transition = "background-color 2.5s ease";
+      tbody.prepend(tr);
+      setTimeout(() => {
+        tr.style.backgroundColor = "transparent";
+      }, 3000);
+    });
+  }
+
   async function loadAuditLogs() {
     const tbody = document.querySelector("[data-admin-audit-tbody]");
     if (!tbody) return;
@@ -3613,47 +3689,7 @@
       }
 
       tbody.replaceChildren();
-      logs.forEach((log) => {
-        const tr = document.createElement("tr");
-
-        let roleBadge = "";
-        if (log.userRole === "ADMIN") {
-          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 ml-1">ADMIN</span>';
-        } else if (log.userRole === "MANAGER") {
-          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 ml-1">MANAGER</span>';
-        } else if (log.userRole === "DOCTOR") {
-          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 ml-1">DOCTOR</span>';
-        } else if (log.userRole === "CUSTOMER") {
-          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 ml-1">PATIENT</span>';
-        }
-
-        let actionClass = "font-medium text-slate2";
-        const act = (log.action || "").toLowerCase();
-        if (act.includes("created")) actionClass = "font-semibold text-emerald-700";
-        if (act.includes("cancelled")) actionClass = "font-semibold text-rose-700";
-        if (act.includes("delayed")) actionClass = "font-semibold text-amber-700";
-        if (act.includes("locked")) actionClass = "font-semibold text-rose-800";
-
-        let timeStr = "—";
-        if (log.createdAt) {
-          const d = new Date(log.createdAt);
-          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-          const day = String(d.getDate()).padStart(2, "0");
-          const month = months[d.getMonth()];
-          const hours = String(d.getHours()).padStart(2, "0");
-          const mins = String(d.getMinutes()).padStart(2, "0");
-          timeStr = `${day} ${month} ${hours}:${mins}`;
-        }
-
-        tr.innerHTML = `
-          <td data-label="Time" class="whitespace-nowrap text-xs text-mute font-mono">${timeStr}</td>
-          <td data-label="User" class="text-sm font-medium text-ink">${log.userEmail || "System"}${roleBadge}</td>
-          <td data-label="Action" class="text-sm ${actionClass}">${log.action}</td>
-          <td data-label="Details" class="text-xs text-slate2 max-w-xs truncate" title="${log.details || ""}">${log.details || "—"}</td>
-          <td data-label="IP" class="whitespace-nowrap text-xs text-mute font-mono">${log.ipAddress || "127.0.0.1"}</td>
-        `;
-        tbody.append(tr);
-      });
+      logs.forEach((log) => tbody.append(renderAuditLogRow(log)));
     } catch (err) {
       console.warn("Could not load audit logs:", err);
       tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-rose-600">Failed to load audit logs: ${err.message || "Unknown error"}</td></tr>`;
@@ -4348,6 +4384,10 @@
     state.consult.summary = null;
     state.consult.list = [];
     state.notifications = [];
+    state.notificationsLoaded = false;
+    if (state.auditLogTimer) clearInterval(state.auditLogTimer);
+    state.auditLogTimer = null;
+    unsubscribe("admin-audit-logs");
     renderNotificationBadge(0);
     render();
     hideQueue();
@@ -4703,20 +4743,29 @@
     }
 
     if (event.target.id === "consult-pick") {
+      const select = event.target;
       const scrollY = window.scrollY;
-      void openConsultation(event.target.value).then(() => {
-        window.scrollTo(0, scrollY);
+      if (select && select.blur) select.blur();
+      void openConsultation(select.value).then(() => {
+        window.scrollTo({ top: scrollY, behavior: "instant" });
       });
       return;
     }
 
     if (event.target.id === "doctor-notes-pick") {
+      const select = event.target;
+      const scrollY = window.scrollY;
+      if (select && select.blur) select.blur();
       const chosen = (state.doctor.sessionAppointments || []).find(
-        (a) => a.appointmentId === event.target.value
+        (a) => a.appointmentId === select.value
       ) || (state.doctor.allAppointments || []).find(
-        (a) => a.appointmentId === event.target.value
+        (a) => a.appointmentId === select.value
       );
-      if (chosen) void selectNotes(chosen);
+      if (chosen) {
+        void selectNotes(chosen).then(() => {
+          window.scrollTo({ top: scrollY, behavior: "instant" });
+        });
+      }
     }
   });
 
