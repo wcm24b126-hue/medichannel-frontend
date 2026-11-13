@@ -547,6 +547,15 @@
     const changed = activeView !== targetId;
 
     if (changed) {
+      if (activeView === "doctor" && state.doctor.pollTimer) {
+        clearInterval(state.doctor.pollTimer);
+        state.doctor.pollTimer = null;
+      }
+      if (activeView === "appointments" && state.patientPollTimer) {
+        clearInterval(state.patientPollTimer);
+        state.patientPollTimer = null;
+      }
+
       views.forEach((item) => {
         item.hidden = item !== view;
       });
@@ -607,8 +616,20 @@
 
     if (id === "appointments") {
       void loadAppointments();
+      if (!state.patientPollTimer) {
+        state.patientPollTimer = setInterval(() => {
+          if (activeView === "appointments") void loadAppointments();
+        }, 5000);
+      }
     } else if (id === "doctor") {
       void loadDoctorConsole();
+      if (!state.doctor.pollTimer) {
+        state.doctor.pollTimer = setInterval(() => {
+          if (activeView === "doctor" && state.doctor.sessionId) {
+            void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+          }
+        }, 5000);
+      }
     } else if (id === "consult") {
       void loadConsultationPicker();
     } else if (id === "admin") {
@@ -716,6 +737,10 @@
     if (!user || !HOME[user.role]) {
       S = null;
       try { localStorage.removeItem("mc-active-user"); } catch {}
+      if (state.doctor.pollTimer) clearInterval(state.doctor.pollTimer);
+      state.doctor.pollTimer = null;
+      if (state.patientPollTimer) clearInterval(state.patientPollTimer);
+      state.patientPollTimer = null;
       if (state.notificationTimer) clearInterval(state.notificationTimer);
       state.notificationTimer = null;
       state.notifications = [];
@@ -747,6 +772,10 @@
 
   function handleSessionExpired() {
     S = null;
+    if (state.doctor.pollTimer) clearInterval(state.doctor.pollTimer);
+    state.doctor.pollTimer = null;
+    if (state.patientPollTimer) clearInterval(state.patientPollTimer);
+    state.patientPollTimer = null;
     if (state.notificationTimer) clearInterval(state.notificationTimer);
     state.notificationTimer = null;
     disconnectRealtime();
@@ -971,6 +1000,24 @@
     const unreadCount = state.notifications.filter((item) => !item.read).length;
     renderNotificationBadge(unreadCount);
     showNotificationToast(notification);
+
+    if (S.role === "DOCTOR") {
+      if (state.doctor.sessionId) {
+        void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+      }
+      void MC.doctorSessions().then((sessions) => {
+        if (Array.isArray(sessions)) {
+          state.doctor.sessions = sessions;
+          const session = sessions.find((s) => s.sessionId === state.doctor.sessionId);
+          if (session && state.doctor.queue) {
+            renderDoctorHeader(session, state.doctor.queue);
+          }
+        }
+      });
+    } else if (S.role === "CUSTOMER") {
+      void loadAppointments();
+      void refreshPatientQueue();
+    }
   }
 
   async function loadNotifications() {
@@ -986,6 +1033,9 @@
       if (!isInitial && unread.length > prevCount && unread.length > 0) {
         const latest = unread[0] || unread[unread.length - 1];
         showNotificationToast(latest);
+        if (S && S.role === "DOCTOR" && state.doctor.sessionId) {
+          void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+        }
       }
       renderNotificationBadge(unread.length);
     } catch (e) {
@@ -994,24 +1044,81 @@
   }
 
   function showNotificationToast(n) {
+    if (!n) return;
+
+    let container = document.getElementById("notification-toast-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "notification-toast-container";
+      container.className =
+        "fixed top-4 right-4 z-50 flex flex-col gap-2.5 max-w-sm w-[calc(100%-2rem)] pointer-events-none";
+      document.body.append(container);
+    }
+
     const toast = document.createElement("div");
-    toast.className = "fixed top-4 right-4 z-50 max-w-sm rounded-lg border border-brand/20 bg-white p-4 shadow-lg grid gap-2";
+    toast.className =
+      "pointer-events-auto rounded-xl border border-line bg-white/95 p-3.5 shadow-xl backdrop-blur transition-all duration-200 transform translate-y-0 opacity-100 flex flex-col gap-1.5";
     toast.setAttribute("role", "alert");
+
+    const header = document.createElement("div");
+    header.className = "flex items-start justify-between gap-2";
+
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "flex items-center gap-2";
+
+    const dot = document.createElement("span");
+    dot.className = "h-2 w-2 rounded-full bg-brand shrink-0";
+
     const title = document.createElement("b");
+    title.className = "text-sm font-bold text-ink leading-tight";
     title.textContent = n.title || "Notification";
+
+    titleWrap.append(dot, title);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.setAttribute("aria-label", "Close notification");
+    closeBtn.className =
+      "h-6 w-6 -mr-1 -mt-1 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-100 transition-colors text-base font-bold cursor-pointer shrink-0";
+    closeBtn.innerHTML = "&times;";
+
+    let dismissTimer = null;
+
+    const dismiss = () => {
+      if (dismissTimer) clearTimeout(dismissTimer);
+      toast.style.opacity = "0";
+      toast.style.transform = "translateX(20px)";
+      setTimeout(() => {
+        try { toast.remove(); } catch {}
+      }, 180);
+    };
+
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      dismiss();
+    };
+
+    header.append(titleWrap, closeBtn);
+    toast.append(header);
+
     const msg = document.createElement("p");
-    msg.className = "text-sm text-slate2";
+    msg.className = "text-xs sm:text-sm text-slate2 leading-relaxed pl-4";
     msg.textContent = n.message || "";
-    toast.append(title, msg);
+    toast.append(msg);
+
     if (n.appointmentId) {
       const link = document.createElement("a");
       link.href = "#consult";
-      link.className = "text-sm font-semibold text-brand hover:underline";
-      link.textContent = "Open consultation";
+      link.className =
+        "text-xs font-semibold text-brand hover:underline pl-4 mt-0.5 inline-flex items-center gap-1";
+      link.textContent = "Open consultation →";
+      link.onclick = () => dismiss();
       toast.append(link);
     }
-    document.body.append(toast);
-    setTimeout(() => toast.remove(), 8000);
+
+    container.append(toast);
+
+    dismissTimer = setTimeout(dismiss, 10000);
   }
 
   function renderNotificationBadge(count) {
@@ -1967,6 +2074,7 @@
     if (!S || S.role !== "DOCTOR") return;
 
     const select = $("doctor-session-select");
+    const queueSelect = $("doctor-queue-session-select");
     const status = document.querySelector("[data-doctor-status]");
     const empty = document.querySelector("[data-doctor-empty]");
 
@@ -1976,12 +2084,44 @@
       let sessions = await MC.doctorSessions();
       if (!Array.isArray(sessions)) sessions = [];
 
+      // Sort sessions chronologically: upcoming/today first (ascending), past sessions last (descending)
+      const todayStr = new Date().toISOString().slice(0, 10);
+      sessions.sort((a, b) => {
+        const aDate = a.sessionDate || "";
+        const bDate = b.sessionDate || "";
+        const aIsUpcoming = aDate >= todayStr;
+        const bIsUpcoming = bDate >= todayStr;
+        if (aIsUpcoming && !bIsUpcoming) return -1;
+        if (!aIsUpcoming && bIsUpcoming) return 1;
+        if (aIsUpcoming && bIsUpcoming) {
+          if (aDate !== bDate) return aDate.localeCompare(bDate);
+          return (a.startTime || "").localeCompare(b.startTime || "");
+        }
+        if (aDate !== bDate) return bDate.localeCompare(aDate);
+        return (b.startTime || "").localeCompare(a.startTime || "");
+      });
+
       state.doctor.sessions = sessions;
       state.doctor.sessionsLoaded = true;
 
-      if (select) {
-        select.replaceChildren();
+      // Smart default: keep current if valid in list, else today's session, else first upcoming, else sessions[0]
+      let defaultSession = sessions.find((s) => s.sessionId === state.doctor.sessionId);
+      if (!defaultSession) {
+        defaultSession = sessions.find((s) => s.sessionDate === todayStr);
+      }
+      if (!defaultSession) {
+        defaultSession = sessions.find((s) => s.sessionDate >= todayStr);
+      }
+      if (!defaultSession && sessions.length > 0) {
+        defaultSession = sessions[0];
+      }
 
+      const chosenSessionId = defaultSession ? defaultSession.sessionId : "";
+      state.doctor.sessionId = chosenSessionId;
+
+      const selects = [select, queueSelect].filter(Boolean);
+      selects.forEach((sel) => {
+        sel.replaceChildren();
         sessions.forEach((session) => {
           const option = el(
             "option",
@@ -1995,15 +2135,10 @@
               (session.consultationType === "ONLINE" ? "Online" : "Physical")
           );
           option.value = session.sessionId;
-          select.append(option);
+          sel.append(option);
         });
-
-        const keep = sessions.find(
-          (session) => session.sessionId === state.doctor.sessionId
-        );
-
-        select.value = keep ? keep.sessionId : sessions[0] ? sessions[0].sessionId : "";
-      }
+        sel.value = chosenSessionId;
+      });
 
       if (!sessions.length) {
         if (empty) empty.hidden = false;
@@ -2015,8 +2150,7 @@
 
       if (empty) empty.hidden = true;
 
-      const sessionId = select ? select.value : sessions[0].sessionId;
-      await loadDoctorQueue(sessionId);
+      await loadDoctorQueue(chosenSessionId);
       void loadDoctorNotesPicker();
     } catch (error) {
       if (error.status === 401) {
@@ -2043,6 +2177,11 @@
       const queue = await MC.doctorQueue(sessionId);
       state.doctor.queue = queue;
       state.doctor.sessionId = sessionId;
+
+      const selects = [$("doctor-session-select"), $("doctor-queue-session-select")].filter(Boolean);
+      selects.forEach((sel) => {
+        if (sel.value !== sessionId) sel.value = sessionId;
+      });
 
       const session = state.doctor.sessions.find(
         (item) => item.sessionId === sessionId
@@ -2090,6 +2229,7 @@
     const title = document.querySelector("[data-doctor-session-title]");
     const meta = document.querySelector("[data-doctor-session-meta]");
     const statusBadge = document.querySelector("[data-doctor-session-status]");
+    const queueLabel = document.querySelector("[data-doctor-queue-session-label]");
 
     if (title) {
       title.textContent = session
@@ -2097,8 +2237,8 @@
         : "Today’s sessions";
     }
 
-    if (meta && session) {
-      meta.textContent =
+    if (session) {
+      const summaryText =
         formatDate(session.sessionDate) +
         " · " +
         formatTime(session.startTime) +
@@ -2109,10 +2249,15 @@
           ? "Online"
           : session.roomNumber
             ? "Room " + session.roomNumber
-            : "Physical") +
-        " · " +
-        session.minutesPerPatient +
-        " min per patient";
+            : "Physical");
+
+      if (meta) {
+        meta.textContent = summaryText + " · " + session.minutesPerPatient + " min per patient";
+      }
+
+      if (queueLabel) {
+        queueLabel.textContent = summaryText;
+      }
     }
 
     if (statusBadge) {
@@ -4755,9 +4900,14 @@
   });
 
   document.addEventListener("change", (event) => {
-    if (event.target.id === "doctor-session-select") {
-      state.doctor.sessionId = event.target.value;
-      void loadDoctorQueue(event.target.value);
+    if (event.target.id === "doctor-session-select" || event.target.id === "doctor-queue-session-select") {
+      const val = event.target.value;
+      state.doctor.sessionId = val;
+      const other = event.target.id === "doctor-session-select"
+        ? $("doctor-queue-session-select")
+        : $("doctor-session-select");
+      if (other) other.value = val;
+      void loadDoctorQueue(val);
       return;
     }
 
