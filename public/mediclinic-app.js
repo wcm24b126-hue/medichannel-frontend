@@ -737,6 +737,7 @@
     if (!user || !HOME[user.role]) {
       S = null;
       try { localStorage.removeItem("mc-active-user"); } catch {}
+      try { sessionStorage.removeItem("mc_tab_user"); sessionStorage.removeItem("mc_tab_token"); } catch {}
       if (state.doctor.pollTimer) clearInterval(state.doctor.pollTimer);
       state.doctor.pollTimer = null;
       if (state.patientPollTimer) clearInterval(state.patientPollTimer);
@@ -750,6 +751,9 @@
 
     try {
       localStorage.setItem("mc-active-user", JSON.stringify({ email: user.email, role: user.role }));
+    } catch {}
+    try {
+      sessionStorage.setItem("mc_tab_user", JSON.stringify(user));
     } catch {}
 
     state.consult.appointmentId = null;
@@ -1400,6 +1404,37 @@
       return;
     }
 
+    // BR-04: One active appointment per patient per session
+    const existingActive = (state.appointments || []).find(
+      (a) => a.sessionId === session.sessionId && ["BOOKED", "ARRIVED", "IN_CONSULTATION"].includes(a.status)
+    );
+    if (existingActive) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = "You already have an active appointment (#" + existingActive.appointmentNumber + ") in this session (BR-04). A patient can have only one active appointment per session.";
+      }
+      return;
+    }
+
+    // BR-05: Booking deadline cutoff (1h physical, 30m online)
+    if (bookingClosed(session)) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = "Booking has closed for this session (BR-05: closes 1 hour before physical sessions and 30 minutes before online sessions).";
+      }
+      return;
+    }
+
+    // BR-03: Session capacity check
+    const remaining = Number(session.availableAppointments ?? session.remainingCapacity ?? 1);
+    if (remaining <= 0) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = "This session is fully booked (BR-03).";
+      }
+      return;
+    }
+
     if (button) button.disabled = true;
 
     try {
@@ -1646,7 +1681,8 @@
         );
       }
 
-      if (appointment.status === "BOOKED" && appointment.paymentStatus === "PAID") {
+      const isPhysical = appointment.consultationType === "PHYSICAL";
+      if (isPhysical && appointment.status === "BOOKED" && appointment.paymentStatus === "PAID") {
         actions.append(
           actionButton(
             "Check in",
@@ -1673,15 +1709,25 @@
         );
       }
 
-      if (["BOOKED", "ARRIVED"].includes(appointment.status)) {
-        actions.append(
-          actionButton(
-            "Cancel",
-            "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
-            "cancel-appointment",
-            appointment.appointmentId
-          )
-        );
+      if (appointment.status === "BOOKED") {
+        if (appointment.paymentStatus === "PENDING" && canCancel(appointment)) {
+          actions.append(
+            actionButton(
+              "Cancel",
+              "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
+              "cancel-appointment",
+              appointment.appointmentId
+            )
+          );
+        } else if (appointment.paymentStatus === "PAID") {
+          actions.append(
+            el("span", "text-[11px] text-mute block leading-tight", "Paid (non-refundable)")
+          );
+        } else if (!canCancel(appointment)) {
+          actions.append(
+            el("span", "text-[11px] text-mute block leading-tight", "Cancel closed (BR-07)")
+          );
+        }
       }
 
       if (!actions.childNodes.length) {
@@ -2384,30 +2430,48 @@
             )
           );
         } else {
-          if (appointment.paymentStatus === "PAID") {
+          const isOnline = appointment.consultationType === "ONLINE" || (session && session.consultationType === "ONLINE");
+          if (isOnline) {
+            // Online consultation goes directly from BOOKED to IN_CONSULTATION (skips ARRIVED - BR-08)
+            if (appointment.paymentStatus === "PAID") {
+              actions.append(
+                doctorAction(
+                  "Start",
+                  "bg-brand border-brand text-white hover:bg-brand-d",
+                  "start",
+                  appointment.appointmentId
+                )
+              );
+            } else {
+              actions.append(
+                el("span", "text-xs font-semibold text-orange-800", "Payment pending")
+              );
+            }
             actions.append(
               doctorAction(
-                "Start",
-                "bg-brand border-brand text-white hover:bg-brand-d",
-                "start",
+                "No-show",
+                "bg-white border-line text-slate2 hover:bg-snow",
+                "noshow",
                 appointment.appointmentId
-              ),
+              )
+            );
+          } else {
+            // Physical consultation: BOOKED -> ARRIVED (at reception / mark arrived)
+            actions.append(
               doctorAction(
                 "Mark arrived",
                 "bg-white border-line text-slate2 hover:bg-snow",
                 "arrive",
                 appointment.appointmentId
+              ),
+              doctorAction(
+                "No-show",
+                "bg-white border-line text-slate2 hover:bg-snow",
+                "noshow",
+                appointment.appointmentId
               )
             );
           }
-          actions.append(
-            doctorAction(
-              "No-show",
-              "bg-white border-line text-slate2 hover:bg-snow",
-              "noshow",
-              appointment.appointmentId
-            )
-          );
         }
       } else if (appointment.status === "ARRIVED") {
         if (appointment.paymentStatus === "PAID") {
@@ -3167,15 +3231,24 @@
       input.disabled = !active || !participant;
       input.placeholder = active
         ? "Type a message…"
-        : "This consultation is read-only";
+        : appointment.status === "COMPLETED"
+          ? "This consultation has ended (read-only)"
+          : "Chat opens when doctor starts consultation";
     }
 
     if (send) send.disabled = !active || !participant;
 
     if (note) {
-      note.textContent = active
-        ? "Messages are stored securely. The doctor can complete the consultation at any time."
-        : "This consultation has ended, so the chat is read-only. The summary remains available.";
+      if (active) {
+        note.textContent =
+          "Messages are stored securely. The doctor can complete the consultation at any time.";
+      } else if (appointment.status === "COMPLETED") {
+        note.textContent =
+          "This consultation has ended, so the chat is read-only (BR-09). The summary remains available.";
+      } else {
+        note.textContent =
+          "The consultation has not started yet. Real-time chat opens when the doctor starts the consultation (BR-09).";
+      }
     }
 
     const completeBtn = document.querySelector("[data-doctor-complete-consult]");
@@ -4240,6 +4313,19 @@
       return;
     }
 
+    if (!Number.isFinite(maxAppointments) || maxAppointments < 1 || maxAppointments > 60) {
+      setStatus(status, "Maximum patients must be between 1 and 60 (BR-01).", true);
+      return;
+    }
+    if (!Number.isFinite(minutesPerPatient) || minutesPerPatient < 5 || minutesPerPatient > 30) {
+      setStatus(status, "Minutes per patient must be between 5 and 30 (BR-01).", true);
+      return;
+    }
+    if (!Number.isFinite(feeLkr) || feeLkr <= 0) {
+      setStatus(status, "Consultation fee must be greater than 0 LKR (BR-01).", true);
+      return;
+    }
+
     const payload = {
       doctorId,
       roomId,
@@ -4434,6 +4520,12 @@
         return;
       }
 
+      if (result.token) {
+        try {
+          sessionStorage.setItem("mc_tab_token", result.token);
+        } catch {}
+      }
+
       setSession(result.user);
       form.reset();
       render();
@@ -4510,6 +4602,11 @@
       }
 
       if (result.user && HOME[result.user.role]) {
+        if (result.token) {
+          try {
+            sessionStorage.setItem("mc_tab_token", result.token);
+          } catch {}
+        }
         setSession(result.user);
         form.reset();
         render();
@@ -4540,6 +4637,10 @@
     }
 
     S = null;
+    try {
+      sessionStorage.removeItem("mc_tab_token");
+      sessionStorage.removeItem("mc_tab_user");
+    } catch {}
     disconnectRealtime();
     state.appointments = [];
     state.appointmentsLoaded = false;

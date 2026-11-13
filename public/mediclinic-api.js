@@ -47,6 +47,10 @@
     );
 
     const headers = new Headers(settings.headers || {});
+    const tabToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("mc_tab_token") : null;
+    if (tabToken && !headers.has("Authorization")) {
+      headers.set("Authorization", "Bearer " + tabToken);
+    }
 
     if (
       settings.body !== undefined &&
@@ -123,7 +127,13 @@
     // Authentication -------------------------------------------------
     async me() {
       // The session route lives outside the BFF prefix.
+      const headers = {};
+      const tabToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("mc_tab_token") : null;
+      if (tabToken) {
+        headers["Authorization"] = "Bearer " + tabToken;
+      }
       const response = await fetch("/api/auth/me", {
+        headers,
         credentials: "same-origin",
         cache: "no-store",
       });

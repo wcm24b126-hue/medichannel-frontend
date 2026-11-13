@@ -28,7 +28,10 @@ async function forwardRequest(
   const targetUrl = `${apiUrl.replace(/\/$/, "")}/api/v1/${path.join("/")}${request.nextUrl.search}`;
 
   const headers = new Headers();
-  const token = readAuthToken(request);
+  const incomingAuth = request.headers.get("authorization");
+  const token = (incomingAuth && incomingAuth.startsWith("Bearer "))
+    ? incomingAuth.substring(7).trim()
+    : readAuthToken(request);
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);

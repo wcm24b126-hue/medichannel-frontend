@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
         email: data.email,
         role: data.role,
       },
+      token: data.accessToken,
     });
 
     setAuthCookie(result, data.accessToken, data.expiresIn);
