@@ -426,6 +426,10 @@
       void loadAdminStats();
     }
 
+    if (link.hash === "#admin-a" || link.hash === "#admin") {
+      void loadAuditLogs();
+    }
+
     if (link.hash === "#manager-s" || link.hash === "#manager-d" || link.hash === "#manager") {
       void loadManagerSessionPicker();
       void loadManagerSessions();
@@ -478,6 +482,10 @@
 
     if (active.id === "admin-d" || active.id === "admin") {
       void loadAdminStats();
+    }
+
+    if (active.id === "admin-a" || active.id === "admin") {
+      void loadAuditLogs();
     }
 
     if (active.id === "manager-s" || active.id === "manager-d") {
@@ -563,6 +571,7 @@
       void loadAdminSpecialisations();
       void loadStaffAccounts();
       void loadAdminStats();
+      void loadAuditLogs();
     } else if (id === "manager") {
       void loadStaffAccounts();
       void loadManagerSessionPicker();
@@ -656,8 +665,16 @@
       S = null;
       if (state.notificationTimer) clearInterval(state.notificationTimer);
       state.notificationTimer = null;
+      state.notifications = [];
+      renderNotificationBadge(0);
       return;
     }
+
+    state.consult.appointmentId = null;
+    state.consult.requestedId = null;
+    state.consult.appointment = null;
+    state.consult.summary = null;
+    state.consult.list = [];
 
     S = {
       id: user.id || user.userId || null,
@@ -907,10 +924,59 @@
   }
 
   function renderNotificationBadge(count) {
-    let badge = document.querySelector("[data-notification-badge]");
-    if (!badge) return;
-    badge.textContent = count > 0 ? String(count) : "";
-    badge.hidden = count === 0;
+    document.querySelectorAll("[data-notification-badge]").forEach((badge) => {
+      if (count > 0) {
+        badge.textContent = String(count);
+        badge.hidden = false;
+      } else {
+        badge.textContent = "";
+        badge.hidden = true;
+      }
+    });
+  }
+
+  function renderNotificationPopover(popover) {
+    const list = popover.querySelector("[data-notification-list]");
+    if (!list) return;
+
+    const items = state.notifications || [];
+    if (!items.length) {
+      list.innerHTML = '<p class="text-xs text-mute py-4 text-center">No notifications</p>';
+      return;
+    }
+
+    list.replaceChildren();
+    items.forEach((n) => {
+      const item = document.createElement("div");
+      item.className = "p-2.5 rounded-lg border border-line bg-snow/50 flex flex-col gap-1 transition-colors hover:bg-snow" + (n.read ? " opacity-75" : " border-brand/40 bg-white shadow-xs");
+
+      const header = document.createElement("div");
+      header.className = "flex items-center justify-between text-xs";
+      const title = document.createElement("b");
+      title.className = n.read ? "text-slate2" : "text-brand font-bold";
+      title.textContent = n.title || "Notification";
+
+      const time = document.createElement("span");
+      time.className = "text-[11px] text-mute";
+      time.textContent = n.createdAt ? (new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })) : "";
+      header.append(title, time);
+
+      const msg = document.createElement("p");
+      msg.className = "text-xs text-ink leading-snug";
+      msg.textContent = n.message || "";
+
+      item.append(header, msg);
+
+      if (n.appointmentId) {
+        const link = document.createElement("a");
+        link.href = "#consult";
+        link.className = "text-xs font-semibold text-brand hover:underline mt-0.5 inline-block";
+        link.textContent = "Open consultation →";
+        item.append(link);
+      }
+
+      list.append(item);
+    });
   }
 
   function renderSessions() {
@@ -2769,17 +2835,6 @@
     ]);
 
     subscribeConsultation(appointment);
-
-    setTimeout(() => {
-      const chatSection = document.querySelector('section[aria-label="Chat"]');
-      if (chatSection) {
-        chatSection.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-      const chatInput = $("consult-c");
-      if (chatInput && !chatInput.disabled) {
-        chatInput.focus();
-      }
-    }, 50);
   }
 
   function renderConsultHeader(appointment) {
@@ -3443,6 +3498,65 @@
     }
   }
 
+  async function loadAuditLogs() {
+    const tbody = document.querySelector("[data-admin-audit-tbody]");
+    if (!tbody) return;
+
+    try {
+      const logs = await MC.auditLogs();
+      if (!Array.isArray(logs) || !logs.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-mute">No audit log entries recorded yet.</td></tr>';
+        return;
+      }
+
+      tbody.replaceChildren();
+      logs.forEach((log) => {
+        const tr = document.createElement("tr");
+
+        let roleBadge = "";
+        if (log.userRole === "ADMIN") {
+          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 ml-1">ADMIN</span>';
+        } else if (log.userRole === "MANAGER") {
+          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 ml-1">MANAGER</span>';
+        } else if (log.userRole === "DOCTOR") {
+          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 ml-1">DOCTOR</span>';
+        } else if (log.userRole === "CUSTOMER") {
+          roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 ml-1">PATIENT</span>';
+        }
+
+        let actionClass = "font-medium text-slate2";
+        const act = (log.action || "").toLowerCase();
+        if (act.includes("created")) actionClass = "font-semibold text-emerald-700";
+        if (act.includes("cancelled")) actionClass = "font-semibold text-rose-700";
+        if (act.includes("delayed")) actionClass = "font-semibold text-amber-700";
+        if (act.includes("locked")) actionClass = "font-semibold text-rose-800";
+
+        let timeStr = "—";
+        if (log.createdAt) {
+          const d = new Date(log.createdAt);
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          const day = String(d.getDate()).padStart(2, "0");
+          const month = months[d.getMonth()];
+          const hours = String(d.getHours()).padStart(2, "0");
+          const mins = String(d.getMinutes()).padStart(2, "0");
+          timeStr = `${day} ${month} ${hours}:${mins}`;
+        }
+
+        tr.innerHTML = `
+          <td data-label="Time" class="whitespace-nowrap text-xs text-mute font-mono">${timeStr}</td>
+          <td data-label="User" class="text-sm font-medium text-ink">${log.userEmail || "System"}${roleBadge}</td>
+          <td data-label="Action" class="text-sm ${actionClass}">${log.action}</td>
+          <td data-label="Details" class="text-xs text-slate2 max-w-xs truncate" title="${log.details || ""}">${log.details || "—"}</td>
+          <td data-label="IP" class="whitespace-nowrap text-xs text-mute font-mono">${log.ipAddress || "127.0.0.1"}</td>
+        `;
+        tbody.append(tr);
+      });
+    } catch (err) {
+      console.warn("Could not load audit logs:", err);
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-rose-600">Failed to load audit logs: ${err.message || "Unknown error"}</td></tr>`;
+    }
+  }
+
   async function handleAdminCreateDoctor(form) {
     const status = form.querySelector("[data-admin-create-status]");
     const button = form.querySelector("button[type=submit]");
@@ -3493,6 +3607,7 @@
       form.reset();
       void loadStaffAccounts();
       void loadAdminStats();
+      void loadAuditLogs();
     } catch (error) {
       setStatus(status, error.message || "Unable to create the doctor.", true);
     } finally {
@@ -3682,6 +3797,7 @@
       void loadManagerSessions();
       state.sessionsLoaded = false;
       void loadSessions();
+      void loadAuditLogs();
     } catch (err) {
       setStatus(status, err.message || "Failed to create session.", true);
     } finally {
@@ -3964,8 +4080,12 @@
       queueTimer: null,
     };
     state.consult.appointmentId = null;
+    state.consult.requestedId = null;
     state.consult.appointment = null;
     state.consult.summary = null;
+    state.consult.list = [];
+    state.notifications = [];
+    renderNotificationBadge(0);
     render();
     hideQueue();
     nav("welcome");
@@ -4006,6 +4126,61 @@
   });
 
   document.addEventListener("click", async (event) => {
+    if (!event.target.closest("[data-notification-wrapper]")) {
+      document.querySelectorAll("[data-notification-popover]").forEach((p) => {
+        p.hidden = true;
+      });
+    }
+
+    const bellBtn = event.target.closest("[data-notification-bell]");
+    if (bellBtn) {
+      const wrapper = bellBtn.closest("[data-notification-wrapper]");
+      if (wrapper) {
+        const popover = wrapper.querySelector("[data-notification-popover]");
+        if (popover) {
+          const wasHidden = popover.hidden;
+          document.querySelectorAll("[data-notification-popover]").forEach((p) => {
+            p.hidden = true;
+          });
+          popover.hidden = !wasHidden;
+          if (!popover.hidden) {
+            renderNotificationPopover(popover);
+          }
+        }
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-mark-all-read]")) {
+      const btn = event.target.closest("[data-mark-all-read]");
+      btn.disabled = true;
+      try {
+        if (typeof MC.markAllNotificationsRead === "function") {
+          await MC.markAllNotificationsRead();
+        }
+        (state.notifications || []).forEach((n) => { n.read = true; });
+        renderNotificationBadge(0);
+        const popover = btn.closest("[data-notification-popover]");
+        if (popover) renderNotificationPopover(popover);
+      } catch (e) {
+        console.warn("Could not mark all read:", e);
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-refresh-audit]")) {
+      const btn = event.target.closest("[data-refresh-audit]");
+      btn.disabled = true;
+      try {
+        await loadAuditLogs();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
     if (event.target.closest("[data-refresh-sessions]")) {
       const btn = event.target.closest("[data-refresh-sessions]");
       btn.disabled = true;
@@ -4031,6 +4206,7 @@
           await loadManagerSessions();
           state.sessionsLoaded = false;
           void loadSessions();
+          void loadAuditLogs();
         } catch (err) {
           setAppMessage(err.message || "Failed to delay session.");
           delaySessionBtn.disabled = false;
@@ -4056,6 +4232,7 @@
           await loadManagerSessions();
           state.sessionsLoaded = false;
           void loadSessions();
+          void loadAuditLogs();
         } catch (err) {
           setAppMessage(err.message || "Failed to cancel session.");
           cancelSessionBtn.disabled = false;
@@ -4252,7 +4429,10 @@
     }
 
     if (event.target.id === "consult-pick") {
-      void openConsultation(event.target.value);
+      const scrollY = window.scrollY;
+      void openConsultation(event.target.value).then(() => {
+        window.scrollTo(0, scrollY);
+      });
       return;
     }
 

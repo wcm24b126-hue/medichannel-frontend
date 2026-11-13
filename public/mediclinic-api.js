@@ -193,6 +193,14 @@
       return request("notifications/" + encodeURIComponent(id) + "/read", { method: "PATCH" });
     },
 
+    markAllNotificationsRead() {
+      return request("notifications/read-all", { method: "PATCH" });
+    },
+
+    auditLogs() {
+      return request("audit-logs");
+    },
+
     sessionQueue(sessionId) {
       return request(
         "sessions/" + encodeURIComponent(sessionId) + "/queue"
