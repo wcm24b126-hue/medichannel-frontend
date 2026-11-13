@@ -356,6 +356,14 @@
 
     if (!views.some((view) => view.dataset.view === id)) id = "welcome";
 
+    if (id === "index" && S && ["DOCTOR", "MANAGER", "ADMIN"].includes(S.role)) {
+      return {
+        id: HOME[S.role] || "welcome",
+        panel: "",
+        consultId: null,
+      };
+    }
+
     const allowed = ACL[id];
 
     if (allowed && !(S && allowed.includes(S.role))) {
@@ -393,10 +401,19 @@
     });
 
     view.querySelectorAll("[data-panel-link]").forEach((link) => {
-      if (link.getAttribute("href") === "#" + panelId) {
+      const isCurrent = link.getAttribute("href") === "#" + panelId;
+      if (isCurrent) {
         link.setAttribute("aria-current", "page");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("text-slate2", "hover:bg-snow");
+          link.classList.add("bg-brand", "text-white");
+        }
       } else {
         link.removeAttribute("aria-current");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("bg-brand", "text-white");
+          link.classList.add("text-slate2", "hover:bg-snow");
+        }
       }
     });
 
@@ -465,10 +482,19 @@
     });
 
     view.querySelectorAll("[data-panel-link]").forEach((link) => {
-      if (link.getAttribute("href") === "#" + active.id) {
+      const isCurrent = link.getAttribute("href") === "#" + active.id;
+      if (isCurrent) {
         link.setAttribute("aria-current", "page");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("text-slate2", "hover:bg-snow");
+          link.classList.add("bg-brand", "text-white");
+        }
       } else {
         link.removeAttribute("aria-current");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("bg-brand", "text-white");
+          link.classList.add("text-slate2", "hover:bg-snow");
+        }
       }
     });
 
@@ -642,10 +668,11 @@
     document.querySelectorAll("[data-roles]").forEach((link) => {
       const raw = link.getAttribute("data-roles") || link.dataset.roles || "*";
       const roles = String(raw).split(/\s+/);
-      link.hidden = !(
+      const isVisible =
         roles.includes("*") ||
-        (S && roles.includes(S.role))
-      );
+        (!S && roles.includes("GUEST")) ||
+        (S && roles.includes(S.role));
+      link.hidden = !isVisible;
     });
 
     document.querySelectorAll("[data-guest-only]").forEach((item) => {
