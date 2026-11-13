@@ -1552,7 +1552,7 @@
 
       if (
         appointment.acceptanceStatus === "ACCEPTED" ||
-        ["IN_CONSULTATION", "COMPLETED"].includes(appointment.status)
+        ["IN_CONSULTATION", "COMPLETED", "BOOKED", "ARRIVED"].includes(appointment.status)
       ) {
         actions.append(
           actionButton(
@@ -2853,9 +2853,7 @@
       const appointments = (Array.isArray(list) ? list : []).filter(
         (item) =>
           item &&
-          (S.role === "DOCTOR"
-            ? ["IN_CONSULTATION", "COMPLETED", "ARRIVED", "BOOKED"].includes(item.status)
-            : (["IN_CONSULTATION", "COMPLETED"].includes(item.status) || item.acceptanceStatus === "ACCEPTED"))
+          ["IN_CONSULTATION", "COMPLETED", "ARRIVED", "BOOKED"].includes(item.status)
       );
 
       state.consult.list = appointments;
