@@ -18,11 +18,11 @@ The repository contains a Next.js frontend and a Spring Boot backend. The backen
 
 ## Deployment Architecture
 
-- Backend hosting: Render
+- Frontend hosting: Netlify (this repository)
+- Backend hosting: Render (separate [`medichannel-backend`](https://github.com/wcm24b126-hue/medichannel-backend) repository)
 - Database hosting: Neon PostgreSQL
-- Frontend hosting: Netlify
 
-The Next.js frontend is in [`medichannel-frontend/`](./medichannel-frontend/), and the Spring Boot service is in [`medichannel/`](./medichannel/). The repository-root [`netlify.toml`](./netlify.toml) configures Netlify to build the frontend. [`render.yaml`](./render.yaml) and [`medichannel/Dockerfile`](./medichannel/Dockerfile) configure the backend service for Render.
+This repository contains only the Next.js frontend. The root [`netlify.toml`](./netlify.toml) configures Netlify. The Spring Boot backend, its `Dockerfile`, and its `render.yaml` live in the backend repository.
 
 ## User Roles
 
@@ -58,14 +58,18 @@ Never commit database passwords, connection strings, encryption keys, JWT secret
 Deploy in this order: Neon database, Render backend, then Netlify frontend.
 
 1. **Neon:** Create a PostgreSQL project and database. Copy its connection details. Use the pooled hostname if the Neon dashboard offers one, and require SSL.
-2. **Render:** Connect this repository and create a Blueprint from the root `render.yaml`. The service builds the Dockerfile in `medichannel/`. In the Render service's environment, set:
+2. **Render (backend repository):** Import `medichannel-backend` and create a Blueprint from its root `render.yaml`. The service builds that repository's `Dockerfile`. In the Render service's environment, set:
    - `DB_URL` to a JDBC URL such as `jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require`
    - `DB_USERNAME` and `DB_PASSWORD` to the Neon role credentials
-   Render sets `SPRING_PROFILES_ACTIVE=production`. Wait for the service build and deployment to finish, then copy its `https://...onrender.com` origin.
-3. **Netlify:** Import the repository root and use the root `netlify.toml`. Set the server-side `API_URL` to the Render backend origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://your-service.onrender.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Then deploy or trigger a new deploy.
-4. **Verify:** Check the Render service status and deployment logs. Then open the Netlify site and verify its backend-backed API requests.
+   - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` to independent Base64-encoded 32+ byte keys
+   - `APP_FRONTEND_ORIGIN` to the exact Netlify site origin (for example `https://medichannel.netlify.app`), with no wildcard
+   - `APP_ADMIN_EMAIL` and `APP_ADMIN_PASSWORD` for the first administrator bootstrap (password: 8+ characters with a letter, a number and a symbol)
+   - Leave `APP_DEMO_SEED` unset or `false` in production
+   Render sets `SPRING_PROFILES_ACTIVE=prod`. Wait for the build and health check (`/actuator/health`) to pass, then copy the `https://...onrender.com` origin.
+3. **Netlify (this repository):** Import this repository. Netlify reads the root `netlify.toml`, runs `npm run lint && npm run build`, publishes `.next`, and applies `@netlify/plugin-nextjs` on Node 22. Set the server-side environment variable `API_URL` to the Render backend origin only, without a trailing slash, `/api`, or `/api/v1` (for example, `https://medichannel-backend.onrender.com`). Do not expose it through a `NEXT_PUBLIC_*` variable. Trigger a deploy.
+4. **Verify:** Confirm the Render service reports healthy, open the Netlify site, and check that login, the doctor catalogue, and the wake endpoint work. The CSP is generated at build time from `API_URL`, so set `API_URL` before the first deploy and rebuild after changing it.
 
-Keep all provider credentials in Render/Netlify environment settings; never commit them or place them in `NEXT_PUBLIC_*` variables. For local backend development, set `SPRING_PROFILES_ACTIVE=production`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in the process environment to connect to Neon. Do not commit local `.env` files.
+Keep all provider credentials in Render/Netlify environment settings; never commit them or place them in `NEXT_PUBLIC_*` variables. For local frontend development, copy `.env.example` to `.env.local` and point `API_URL` at your local or deployed backend. Do not commit local `.env` files.
 
 ### Render cold starts and frontend caching
 
@@ -109,7 +113,7 @@ official IT404050 Assignment 2 brief is in
 
 ## Environment Variables
 
-The frontend server reads `API_URL`, which must be the Render backend origin without `/api` or `/api/v1`. The production backend reads `PORT`, `SPRING_PROFILES_ACTIVE`, `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. `PORT` is supplied by Render. The production profile requires a JDBC-formatted `DB_URL`; Neon connection details should use SSL (`sslmode=require`).
+The frontend server reads `API_URL`, which must be the Render backend origin without `/api` or `/api/v1`. `NODE_VERSION=22` is set in `netlify.toml`. The production backend (in the separate backend repository) reads `PORT`, `SPRING_PROFILES_ACTIVE`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET`, `APP_FRONTEND_ORIGIN`, `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD`, and optionally `APP_DEMO_SEED` / `APP_DEMO_PASSWORD`. `PORT` is supplied by Render. The production profile requires a JDBC-formatted `DB_URL`; Neon connection details should use SSL (`sslmode=require`).
 
 ## Team Development
 

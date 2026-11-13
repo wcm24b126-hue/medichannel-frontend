@@ -14,6 +14,20 @@ const inlineScriptHashes = [
   createHash("sha256").update(match[1]).digest("base64")
 );
 
+// Derive the backend CSP origins from API_URL so a renamed Render service does
+// not get silently blocked. Falls back to the documented production service.
+const configuredApiUrl =
+  process.env.API_URL?.trim() || "https://medichannel-backend.onrender.com";
+let backendOrigin = "https://medichannel-backend.onrender.com";
+let backendSocketOrigin = "wss://medichannel-backend.onrender.com";
+try {
+  const parsed = new URL(configuredApiUrl);
+  backendOrigin = `${parsed.protocol}//${parsed.host}`;
+  backendSocketOrigin = `${parsed.protocol === "https:" ? "wss:" : "ws:"}//${parsed.host}`;
+} catch {
+  // Keep the documented default when API_URL is not a valid absolute URL.
+}
+
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
@@ -68,7 +82,7 @@ const nextConfig: NextConfig = {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob:",
-      `connect-src 'self' https://medichannel-backend.onrender.com wss://medichannel-backend.onrender.com${devConnectOrigins}`,
+      `connect-src 'self' ${backendOrigin} ${backendSocketOrigin}${devConnectOrigins}`,
       "media-src 'none'",
       "object-src 'none'",
       "frame-src 'none'",

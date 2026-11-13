@@ -79,12 +79,25 @@ export async function POST(request: NextRequest) {
       );
     }
     if (
-      password.length < 12 ||
+      password.length < 8 ||
       new TextEncoder().encode(password).length > 72 ||
       password !== confirmPassword
     ) {
       return NextResponse.json(
-        { message: "Use a matching password between 12 and 72 bytes." },
+        { message: "Use a matching password between 8 and 72 bytes." },
+        { status: 400 }
+      );
+    }
+    if (
+      !/[A-Za-z]/.test(password) ||
+      !/\d/.test(password) ||
+      !/[^A-Za-z0-9]/.test(password)
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Password must contain at least one letter, one number and one symbol.",
+        },
         { status: 400 }
       );
     }

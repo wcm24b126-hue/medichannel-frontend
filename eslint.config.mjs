@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Static browser delivery files are not part of the Next.js source tree.
     "public/**",
+    // Node-based developer/e2e scripts run outside the bundled app (CommonJS).
+    "scripts/**",
   ]),
 ]);
 

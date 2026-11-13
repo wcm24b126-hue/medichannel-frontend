@@ -81,8 +81,15 @@ export default function AdminUsers() {
     setError("");
     setSuccess(null);
 
-    if (newPassword.length < 12) {
-      setError("The password must contain at least 12 characters.");
+    if (
+      newPassword.length < 8 ||
+      !/[A-Za-z]/.test(newPassword) ||
+      !/\d/.test(newPassword) ||
+      !/[^A-Za-z0-9]/.test(newPassword)
+    ) {
+      setError(
+        "The password must contain at least 8 characters, including a letter, a number and a symbol."
+      );
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -211,17 +218,18 @@ export default function AdminUsers() {
             <div className="border-t border-slate-200 pt-5">
               <h3 className="font-semibold text-slate-900">Initial login password</h3>
               <p className="mt-1 text-sm text-slate-500">
-                Use at least 12 characters. For compatibility with the current BCrypt configuration,
-                the UTF-8 encoded password must not exceed 72 bytes.
+                Use at least 8 characters, including a letter, a number and a symbol. For
+                compatibility with the current BCrypt configuration, the UTF-8 encoded
+                password must not exceed 72 bytes.
               </p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm font-medium text-slate-700">
                   New password
-                  <input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="field w-full" />
+                  <input required type="password" minLength={8} maxLength={72} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="field w-full" />
                 </label>
                 <label className="block text-sm font-medium text-slate-700">
                   Confirm password
-                  <input required type="password" minLength={12} maxLength={72} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="field w-full" />
+                  <input required type="password" minLength={8} maxLength={72} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="field w-full" />
                 </label>
               </div>
             </div>

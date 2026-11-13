@@ -80,7 +80,6 @@ async function run() {
     { email: 'admin@medichannel.demo', pass: 'Admin@123456', role: 'ADMIN' },
     { email: 'manager@medichannel.demo', pass: 'MediDemo#2026!', role: 'MANAGER' },
     { email: 'amaya.fernando@medichannel.demo', pass: 'Doctor#2026!', role: 'DOCTOR' },
-    { email: 'ranjanram@gmail.com', pass: 'password@123', role: 'DOCTOR' },
     { email: 'patient@medichannel.demo', pass: 'Patient#2026!', role: 'CUSTOMER' },
     { email: 'patient1@medichannel.demo', pass: 'Patient#2026!', role: 'CUSTOMER' }
   ];

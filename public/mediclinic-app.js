@@ -4199,11 +4199,11 @@
       "Please enter a valid email address.",
     pw: (value) =>
       !(
-        value.length >= 12 &&
+        value.length >= 8 &&
         /[A-Za-z]/.test(value) &&
         /\d/.test(value) &&
         /[^A-Za-z0-9]/.test(value)
-      ) && "Use at least 12 characters, with a letter, a number and a symbol.",
+      ) && "Use at least 8 characters, with a letter, a number and a symbol.",
     pw2: (value, form) =>
       value !== form.elements.password.value &&
       "The passwords don’t match yet.",
@@ -5115,7 +5115,7 @@
   "Please enter your phone number like 07XXXXXXXX.": "කරුණාකර දුරකථන අංකය 07XXXXXXXX ආකාරයට ඇතුල් කරන්න.",
   "Please enter a valid email address.": "කරුණාකර වලංගු විද්‍යුත් තැපැල් ලිපිනයක් ඇතුල් කරන්න.",
   "Please enter your address.": "කරුණාකර ඔබේ ලිපිනය ඇතුල් කරන්න.",
-  "Use at least 12 characters, with a letter, a number and a symbol.": "අවම අක්ෂර 8ක්, අකුරක්, ඉලක්කමක් සහ සංකේතයක් සමඟ භාවිතා කරන්න.",
+  "Use at least 8 characters, with a letter, a number and a symbol.": "අවම අක්ෂර 8ක්, අකුරක්, ඉලක්කමක් සහ සංකේතයක් සමඟ භාවිතා කරන්න.",
   "The passwords don’t match yet.": "මුරපද තවම ගැළපෙන්නේ නැත.",
   "Please fill this in.": "කරුණාකර මෙය පුරවන්න.",
   "Skip the phone queue.": "දුරකථන පෝලිම මඟහරින්න.",
