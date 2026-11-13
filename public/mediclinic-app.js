@@ -3838,6 +3838,28 @@
       return;
     }
 
+    const fillLoginBtn = event.target.closest("[data-fill-login]");
+    if (fillLoginBtn) {
+      const [email, password] = (fillLoginBtn.getAttribute("data-fill-login") || "").split("|");
+      const emailInput = $("login-em");
+      const pwInput = $("login-pw");
+      if (emailInput && email) {
+        emailInput.value = email;
+        emailInput.setAttribute("aria-invalid", "false");
+      }
+      if (pwInput && password) {
+        pwInput.value = password;
+        pwInput.setAttribute("aria-invalid", "false");
+      }
+      const err = $("login-err");
+      if (err) err.hidden = true;
+      const emErr = $("login-e_em");
+      if (emErr) emErr.textContent = "";
+      const pwErr = $("login-e_pw");
+      if (pwErr) pwErr.textContent = "";
+      return;
+    }
+
     const showButton = event.target.closest("[data-show]");
     if (showButton) {
       const input = $(showButton.closest("[data-view]").dataset.view + "-" + showButton.dataset.show);

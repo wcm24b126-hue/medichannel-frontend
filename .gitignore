@@ -47,4 +47,6 @@ next-env.d.ts
 # IDE & editor files
 .vscode/
 Modelfile
+xampp-installer.run
+medichannel/
 
