@@ -886,18 +886,37 @@
     if (list) list.replaceChildren();
 
     try {
-      const sessions = await MC.sessions(filters);
+      let sessions = await MC.sessions(filters);
       if (!Array.isArray(sessions)) throw new Error("Unexpected response");
+
+      let fallbackNotice = "";
+      // If filtering by date returned 0 sessions, fall back to all upcoming sessions
+      // so the patient is never stranded on an empty screen.
+      if (sessions.length === 0 && filters.date) {
+        try {
+          const allUpcoming = await MC.sessions({ ...filters, date: "" });
+          if (Array.isArray(allUpcoming) && allUpcoming.length > 0) {
+            sessions = allUpcoming;
+            fallbackNotice = `No sessions match for ${formatDate(filters.date)}. Showing all upcoming sessions:`;
+          }
+        } catch {
+          // keep original empty sessions
+        }
+      }
 
       state.sessions = sessions;
       state.sessionsLoaded = true;
 
       if (heading) {
-        const day = filters.date ? formatDate(filters.date) : "all dates";
-        heading.textContent =
-          sessions.length +
-          (sessions.length === 1 ? " session on " : " sessions on ") +
-          day;
+        if (fallbackNotice) {
+          heading.textContent = fallbackNotice;
+        } else {
+          const day = filters.date ? formatDate(filters.date) : "all dates";
+          heading.textContent =
+            sessions.length +
+            (sessions.length === 1 ? " session on " : " sessions on ") +
+            day;
+        }
       }
 
       if (status) {
