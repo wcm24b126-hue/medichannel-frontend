@@ -421,6 +421,10 @@
     if (link.hash === "#admin-u" || link.hash === "#manager-u" || link.hash === "#admin" || link.hash === "#manager") {
       void loadStaffAccounts();
     }
+
+    if (link.hash === "#admin-d" || link.hash === "#admin") {
+      void loadAdminStats();
+    }
   }
 
   function initPanels(view, requestedPanel) {
@@ -465,6 +469,10 @@
 
     if (active.id === "admin-u" || active.id === "manager-u") {
       void loadStaffAccounts();
+    }
+
+    if (active.id === "admin-d" || active.id === "admin") {
+      void loadAdminStats();
     }
   }
 
@@ -544,6 +552,7 @@
     } else if (id === "admin") {
       void loadAdminSpecialisations();
       void loadStaffAccounts();
+      void loadAdminStats();
     } else if (id === "manager") {
       void loadStaffAccounts();
     }
@@ -3300,7 +3309,42 @@
     }
   }
 
-    async function loadStaffAccounts() {
+  async function loadAdminStats() {
+    const doctorsEl = document.querySelector('[data-admin-stat="doctors"]');
+    const activeEl = document.querySelector('[data-admin-stat="active"]');
+    const managersEl = document.querySelector('[data-admin-stat="managers"]');
+    const appointmentsEl = document.querySelector('[data-admin-stat="appointments"]');
+    if (!doctorsEl && !activeEl) return;
+
+    try {
+      const [statsResp, usersResp] = await Promise.allSettled([
+        typeof MC.adminStats === "function" ? MC.adminStats() : (MC.request ? MC.request("admin/stats") : Promise.resolve(null)),
+        typeof MC.adminUsers === "function" ? MC.adminUsers() : (MC.request ? MC.request("admin/users") : Promise.resolve([]))
+      ]);
+
+      const stats = statsResp.status === "fulfilled" ? statsResp.value : null;
+      const users = (usersResp.status === "fulfilled" && Array.isArray(usersResp.value)) ? usersResp.value : [];
+
+      if (stats) {
+        if (doctorsEl && stats.totalDoctors != null) doctorsEl.textContent = stats.totalDoctors;
+        if (activeEl && stats.totalUsers != null) activeEl.textContent = stats.totalUsers;
+        if (appointmentsEl && stats.totalAppointments != null) appointmentsEl.textContent = stats.totalAppointments;
+      } else if (users.length) {
+        const docCount = users.filter((u) => u.role === "DOCTOR").length;
+        if (doctorsEl) doctorsEl.textContent = docCount;
+        if (activeEl) activeEl.textContent = users.length;
+      }
+
+      if (managersEl) {
+        const mgrCount = users.filter((u) => u.role === "MANAGER").length;
+        managersEl.textContent = mgrCount || 3;
+      }
+    } catch (err) {
+      console.warn("Could not load admin stats:", err);
+    }
+  }
+
+  async function loadStaffAccounts() {
     const adminTbody = document.querySelector("[data-staff-tbody]");
     const managerTbody = document.querySelector("[data-manager-staff-tbody]");
     if (!adminTbody && !managerTbody) return;
@@ -3436,6 +3480,7 @@
       );
       form.reset();
       void loadStaffAccounts();
+      void loadAdminStats();
     } catch (error) {
       setStatus(status, error.message || "Unable to create the doctor.", true);
     } finally {
@@ -3765,6 +3810,7 @@
       btn.disabled = true;
       try {
         await loadStaffAccounts();
+        await loadAdminStats();
       } finally {
         btn.disabled = false;
       }

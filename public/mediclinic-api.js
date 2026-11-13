@@ -186,6 +186,10 @@
       return request("admin/users" + query(params));
     },
 
+    adminStats() {
+      return request("admin/stats");
+    },
+
     adminActivateUser(userId) {
       return request(
         "admin/users/" + encodeURIComponent(userId) + "/activate",
