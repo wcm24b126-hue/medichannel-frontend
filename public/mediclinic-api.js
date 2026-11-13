@@ -166,6 +166,13 @@
       return request("rooms");
     },
 
+    createRoom(payload) {
+      return request("rooms", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
     cancelSession(sessionId) {
       return request("sessions/" + encodeURIComponent(sessionId) + "/cancel", {
         method: "PATCH",
@@ -317,6 +324,20 @@
 
     doctorAppointments(filters) {
       return request("doctor/appointments" + query(filters));
+    },
+
+    acceptAppointment(appointmentId) {
+      return request(
+        "doctor/appointments/" + encodeURIComponent(appointmentId) + "/accept",
+        { method: "PATCH", body: {} }
+      );
+    },
+
+    declineAppointment(appointmentId) {
+      return request(
+        "doctor/appointments/" + encodeURIComponent(appointmentId) + "/decline",
+        { method: "PATCH", body: {} }
+      );
     },
 
     markArrived(appointmentId) {

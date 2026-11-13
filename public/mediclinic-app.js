@@ -447,6 +447,10 @@
       void loadAuditLogs();
     }
 
+    if (link.hash === "#admin-r" || link.hash === "#admin") {
+      void loadAdminRooms();
+    }
+
     if (link.hash === "#manager-s" || link.hash === "#manager-d" || link.hash === "#manager") {
       void loadManagerSessionPicker();
       void loadManagerSessions();
@@ -512,6 +516,10 @@
 
     if (active.id === "admin-a" || active.id === "admin") {
       void loadAuditLogs();
+    }
+
+    if (active.id === "admin-r" || active.id === "admin") {
+      void loadAdminRooms();
     }
 
     if (active.id === "manager-s" || active.id === "manager-d") {
@@ -596,6 +604,7 @@
     } else if (id === "admin") {
       void loadAdminSpecialisations();
       void loadStaffAccounts();
+      void loadAdminRooms();
       void loadAdminStats();
       void loadAuditLogs();
     } else if (id === "manager") {
@@ -1359,6 +1368,22 @@
       state.appointments = list;
       state.appointmentsLoaded = true;
       renderAppointments(list);
+
+      const acceptedAppt = list.find((a) => a.acceptanceStatus === "ACCEPTED" && ["BOOKED", "ARRIVED", "IN_CONSULTATION"].includes(a.status));
+      let banner = document.querySelector("[data-accepted-banner]");
+      if (acceptedAppt) {
+        if (!banner) {
+          banner = el("div", "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm flex items-center gap-3 mb-4");
+          banner.setAttribute("data-accepted-banner", "");
+          const apptView = document.querySelector("section[data-view='appointments'] main");
+          if (apptView) apptView.prepend(banner);
+        }
+        const when = [formatDate(acceptedAppt.sessionDate), formatTime(acceptedAppt.sessionStartTime)].filter(Boolean).join(" at ");
+        banner.innerHTML = '<span class="text-emerald-600 font-bold text-base">✓</span> <span><b>Appointment Confirmed:</b> The doctor has accepted your appointment on ' + escapeHtml(when) + '. Make sure to be ready on time.</span>';
+        banner.hidden = false;
+      } else if (banner) {
+        banner.hidden = true;
+      }
       if (status) status.hidden = true;
       if (empty) empty.hidden = list.length > 0;
       await refreshPatientQueue(list);
@@ -1415,7 +1440,15 @@
 
       const statusCell = document.createElement("td");
       statusCell.dataset.label = "Status";
-      statusCell.append(appointmentBadge(appointment.status));
+      const statusWrap = document.createElement("div");
+      statusWrap.className = "flex flex-col gap-1 items-start";
+      statusWrap.append(appointmentBadge(appointment.status));
+      if (appointment.acceptanceStatus === "ACCEPTED") {
+        statusWrap.append(badge("Doctor Accepted", "green"));
+      } else if (appointment.status === "BOOKED") {
+        statusWrap.append(badge("Pending Acceptance", "orange"));
+      }
+      statusCell.append(statusWrap);
       row.append(statusCell);
 
       const paymentCell = document.createElement("td");
@@ -1463,30 +1496,27 @@
       }
 
       if (
-        appointment.status === "BOOKED" &&
-        appointment.paymentStatus !== "PAID" &&
-        canCancel(appointment)
+        appointment.acceptanceStatus === "ACCEPTED" ||
+        ["IN_CONSULTATION", "COMPLETED"].includes(appointment.status)
       ) {
         actions.append(
           actionButton(
-            "Cancel",
-            "bg-white border-line text-slate2 hover:bg-snow",
-            "cancel-appointment",
+            appointment.status === "COMPLETED"
+              ? "Summary & feedback"
+              : "Open chat",
+            "bg-white border-brand text-brand hover:bg-snow font-semibold",
+            "open-consult",
             appointment.appointmentId
           )
         );
       }
 
-      if (
-        ["IN_CONSULTATION", "COMPLETED"].includes(appointment.status)
-      ) {
+      if (["BOOKED", "ARRIVED"].includes(appointment.status)) {
         actions.append(
           actionButton(
-            appointment.status === "IN_CONSULTATION"
-              ? "Open chat"
-              : "Summary & feedback",
-            "bg-white border-line text-slate2 hover:bg-snow",
-            "open-consult",
+            "Cancel",
+            "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
+            "cancel-appointment",
             appointment.appointmentId
           )
         );
@@ -2119,6 +2149,11 @@
       }
 
       status.append(badge(entry[0], entry[1]));
+      if (appointment.acceptanceStatus === "ACCEPTED") {
+        status.append(badge("Accepted", "green"));
+      } else if (appointment.status === "BOOKED") {
+        status.append(badge("Pending", "orange"));
+      }
       row.append(status);
 
       const payment = document.createElement("td");
@@ -2139,30 +2174,47 @@
       actions.className = "flex flex-wrap items-center justify-end gap-2";
 
       if (appointment.status === "BOOKED") {
-        if (appointment.paymentStatus === "PAID") {
+        if (appointment.acceptanceStatus !== "ACCEPTED") {
           actions.append(
             doctorAction(
-              "Start",
-              "bg-brand border-brand text-white hover:bg-brand-d",
-              "start",
+              "✓ Accept",
+              "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700",
+              "accept",
               appointment.appointmentId
             ),
             doctorAction(
-              "Mark arrived",
+              "✕ Decline",
+              "bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100",
+              "decline",
+              appointment.appointmentId
+            )
+          );
+        } else {
+          if (appointment.paymentStatus === "PAID") {
+            actions.append(
+              doctorAction(
+                "Start",
+                "bg-brand border-brand text-white hover:bg-brand-d",
+                "start",
+                appointment.appointmentId
+              ),
+              doctorAction(
+                "Mark arrived",
+                "bg-white border-line text-slate2 hover:bg-snow",
+                "arrive",
+                appointment.appointmentId
+              )
+            );
+          }
+          actions.append(
+            doctorAction(
+              "No-show",
               "bg-white border-line text-slate2 hover:bg-snow",
-              "arrive",
+              "noshow",
               appointment.appointmentId
             )
           );
         }
-        actions.append(
-          doctorAction(
-            "No-show",
-            "bg-white border-line text-slate2 hover:bg-snow",
-            "noshow",
-            appointment.appointmentId
-          )
-        );
       } else if (appointment.status === "ARRIVED") {
         if (appointment.paymentStatus === "PAID") {
           actions.append(
@@ -2245,7 +2297,21 @@
     const statusNode = document.querySelector("[data-doctor-status]");
 
     try {
-      if (name === "arrive") {
+      if (name === "accept") {
+        await MC.acceptAppointment(appointmentId);
+        setStatus(statusNode, "Appointment accepted. Patient has been notified.");
+        await loadDoctorQueue(state.doctor.sessionId);
+        return;
+      } else if (name === "decline") {
+        if (!window.confirm("Decline this appointment?")) {
+          if (button) button.disabled = false;
+          return;
+        }
+        await MC.declineAppointment(appointmentId);
+        setStatus(statusNode, "Appointment declined.");
+        await loadDoctorQueue(state.doctor.sessionId);
+        return;
+      } else if (name === "arrive") {
         await MC.markArrived(appointmentId);
         setStatus(statusNode, "Patient marked as arrived.");
       } else if (name === "start") {
@@ -3642,6 +3708,82 @@
     }
   }
 
+  async function loadAdminRooms() {
+    const tbody = document.querySelector("[data-admin-rooms-tbody]");
+    if (!tbody) return;
+
+    try {
+      const rooms = await MC.rooms();
+      tbody.replaceChildren();
+
+      if (!Array.isArray(rooms) || !rooms.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-mute">No consultation rooms found.</td></tr>';
+        return;
+      }
+
+      rooms.forEach((r) => {
+        const tr = el("tr");
+        const typeBadge = r.roomType === "PHYSICAL"
+          ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-sky-50 text-sky-800 border-sky-200">Physical</span>'
+          : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-purple-50 text-purple-800 border-purple-200">Virtual</span>';
+
+        tr.innerHTML =
+          '<td data-label="Room No."><b>' + escapeHtml(r.roomNumber) + '</b></td>' +
+          '<td data-label="Name">' + escapeHtml(r.name || "—") + '</td>' +
+          '<td data-label="Location">' + escapeHtml(r.location || "Hospital Main Building") + '</td>' +
+          '<td data-label="Type">' + typeBadge + '</td>' +
+          '<td data-label="Capacity">' + (r.capacity || 1) + '</td>';
+        tbody.append(tr);
+      });
+    } catch (err) {
+      console.warn("Could not load admin rooms:", err);
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-bad">Failed to load rooms.</td></tr>';
+    }
+  }
+
+  async function handleAdminCreateRoom(form) {
+    const status = form.querySelector("[data-admin-room-status]");
+    const button = form.querySelector("button[type='submit']");
+    const numInput = $("admin-room-number");
+    const nameInput = $("admin-room-name");
+    const locInput = $("admin-room-location");
+    const typeSelect = $("admin-room-type");
+    const capInput = $("admin-room-capacity");
+
+    if (!numInput || !nameInput || !typeSelect) return;
+
+    const payload = {
+      roomNumber: numInput.value.trim(),
+      name: nameInput.value.trim(),
+      location: locInput ? locInput.value.trim() : "",
+      roomType: typeSelect.value,
+      capacity: Number(capInput ? capInput.value : 1) || 1,
+    };
+
+    if (!payload.roomNumber || !payload.name) {
+      setStatus(status, "Room number and name are required.", true);
+      return;
+    }
+
+    if (button) button.disabled = true;
+    setStatus(status, "Creating consultation room…");
+
+    try {
+      const created = await MC.createRoom(payload);
+      setStatus(
+        status,
+        "Consultation room " + (created.roomNumber || payload.roomNumber) + " created successfully!"
+      );
+      form.reset();
+      void loadAdminRooms();
+      void loadManagerSessionPicker();
+    } catch (error) {
+      setStatus(status, error.message || "Unable to create room.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   async function loadManagerSessionPicker() {
     const docSelect = $("sess-doc");
     const roomSelect = $("sess-room");
@@ -4362,6 +4504,17 @@
       return;
     }
 
+    if (event.target.closest("[data-refresh-rooms]")) {
+      const btn = event.target.closest("[data-refresh-rooms]");
+      btn.disabled = true;
+      try {
+        await loadAdminRooms();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
     const toggleBtn = event.target.closest("[data-toggle-user]");
     if (toggleBtn) {
       const userId = toggleBtn.getAttribute("data-toggle-user");
@@ -4602,6 +4755,14 @@
     adminCreateForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void handleAdminCreateDoctor(adminCreateForm);
+    });
+  }
+
+  const adminCreateRoomForm = document.querySelector("[data-admin-create-room-form]");
+  if (adminCreateRoomForm) {
+    adminCreateRoomForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void handleAdminCreateRoom(adminCreateRoomForm);
     });
   }
 
