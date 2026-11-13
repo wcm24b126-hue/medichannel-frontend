@@ -37,7 +37,7 @@ See `CHANGELOG_ASSIGNMENT_2.md`.
 8. Group report, ERD, 30-case test table, slides, contribution section — not in repo
 
 ## Next exact actions
-1. Set `APP_DEMO_SEED=true` + `APP_DEMO_PASSWORD=MediDemo#2026!` on Render production (or create staging service from `render-staging.yaml`), redeploy
+1. Ensure `APP_DEMO_SEED=false` on production. In staging only, seed with a securely generated `APP_DEMO_PASSWORD`, then remove it immediately after bootstrapping.
 2. Set Netlify `API_URL` to the seeded service, redeploy
 3. Disable Netlify Team SSO if public demo needed
 4. Run full E2E against hosted URL once data is present

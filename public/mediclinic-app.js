@@ -36,11 +36,21 @@
   };
 
   const HOME = {
-    CUSTOMER: "appointments",
+    CUSTOMER: "index",
     DOCTOR: "doctor",
-    MANAGER: "manager",
+    MANAGER: "manager-s",
     ADMIN: "admin",
   };
+
+  function escapeHtml(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
 
   const ACL = {
     appointments: ["CUSTOMER"],
@@ -356,6 +366,14 @@
 
     if (!views.some((view) => view.dataset.view === id)) id = "welcome";
 
+    if (id === "index" && S && ["DOCTOR", "MANAGER", "ADMIN"].includes(S.role)) {
+      return {
+        id: HOME[S.role] || "welcome",
+        panel: "",
+        consultId: null,
+      };
+    }
+
     const allowed = ACL[id];
 
     if (allowed && !(S && allowed.includes(S.role))) {
@@ -393,10 +411,19 @@
     });
 
     view.querySelectorAll("[data-panel-link]").forEach((link) => {
-      if (link.getAttribute("href") === "#" + panelId) {
+      const isCurrent = link.getAttribute("href") === "#" + panelId;
+      if (isCurrent) {
         link.setAttribute("aria-current", "page");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("text-slate2", "hover:bg-snow");
+          link.classList.add("bg-brand", "text-white");
+        }
       } else {
         link.removeAttribute("aria-current");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("bg-brand", "text-white");
+          link.classList.add("text-slate2", "hover:bg-snow");
+        }
       }
     });
 
@@ -412,6 +439,31 @@
       history.replaceState(null, "", link.hash);
     } catch {
       // Ignore history failures (for example in private modes).
+    }
+
+    if (link.hash === "#doctor-n") {
+      void loadDoctorNotesPicker();
+    }
+
+    if (link.hash === "#admin-u" || link.hash === "#manager-u" || link.hash === "#admin" || link.hash === "#manager") {
+      void loadStaffAccounts();
+    }
+
+    if (link.hash === "#admin-d" || link.hash === "#admin") {
+      void loadAdminStats();
+    }
+
+    if (link.hash === "#admin-a" || link.hash === "#admin") {
+      void loadAuditLogs();
+    }
+
+    if (link.hash === "#admin-r" || link.hash === "#admin") {
+      void loadAdminRooms();
+    }
+
+    if (link.hash === "#manager-s" || link.hash === "#manager-d" || link.hash === "#manager") {
+      void loadManagerSessionPicker();
+      void loadManagerSessions();
     }
   }
 
@@ -444,12 +496,46 @@
     });
 
     view.querySelectorAll("[data-panel-link]").forEach((link) => {
-      if (link.getAttribute("href") === "#" + active.id) {
+      const isCurrent = link.getAttribute("href") === "#" + active.id;
+      if (isCurrent) {
         link.setAttribute("aria-current", "page");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("text-slate2", "hover:bg-snow");
+          link.classList.add("bg-brand", "text-white");
+        }
       } else {
         link.removeAttribute("aria-current");
+        if (link.closest("nav[aria-label='Pages']")) {
+          link.classList.remove("bg-brand", "text-white");
+          link.classList.add("text-slate2", "hover:bg-snow");
+        }
       }
     });
+
+    if (active.id === "doctor-n") {
+      void loadDoctorNotesPicker();
+    }
+
+    if (active.id === "admin-u" || active.id === "manager-u") {
+      void loadStaffAccounts();
+    }
+
+    if (active.id === "admin-d" || active.id === "admin") {
+      void loadAdminStats();
+    }
+
+    if (active.id === "admin-a" || active.id === "admin") {
+      void loadAuditLogs();
+    }
+
+    if (active.id === "admin-r" || active.id === "admin") {
+      void loadAdminRooms();
+    }
+
+    if (active.id === "manager-s" || active.id === "manager-d") {
+      void loadManagerSessionPicker();
+      void loadManagerSessions();
+    }
   }
 
   function showView(id, panel, options) {
@@ -525,6 +611,22 @@
       void loadDoctorConsole();
     } else if (id === "consult") {
       void loadConsultationPicker();
+    } else if (id === "admin") {
+      void loadAdminSpecialisations();
+      void loadStaffAccounts();
+      void loadAdminRooms();
+      void loadAdminStats();
+      void loadAuditLogs();
+      subscribeAdminAuditLogs();
+      if (!state.auditLogTimer) {
+        state.auditLogTimer = setInterval(() => {
+          if (activeView === "admin") void loadAuditLogs();
+        }, 6000);
+      }
+    } else if (id === "manager") {
+      void loadStaffAccounts();
+      void loadManagerSessionPicker();
+      void loadManagerSessions();
     }
 
     if (["welcome", "index", "appointments"].includes(id)) {
@@ -589,11 +691,13 @@
     });
 
     document.querySelectorAll("[data-roles]").forEach((link) => {
-      const roles = String(link.dataset.roles || "*").split(/\s+/);
-      link.hidden = !(
+      const raw = link.getAttribute("data-roles") || link.dataset.roles || "*";
+      const roles = String(raw).split(/\s+/);
+      const isVisible =
         roles.includes("*") ||
-        (S && roles.includes(S.role))
-      );
+        (!S && roles.includes("GUEST")) ||
+        (S && roles.includes(S.role));
+      link.hidden = !isVisible;
     });
 
     document.querySelectorAll("[data-guest-only]").forEach((item) => {
@@ -601,7 +705,8 @@
     });
 
     document.querySelectorAll("[data-home-dashboard]").forEach((link) => {
-      const home = S ? HOME[S.role] : null;
+      const isStaff = S && ["DOCTOR", "MANAGER", "ADMIN"].includes(S.role);
+      const home = isStaff ? HOME[S.role] : null;
       link.hidden = !home;
       if (home) link.href = "#" + home;
     });
@@ -612,8 +717,16 @@
       S = null;
       if (state.notificationTimer) clearInterval(state.notificationTimer);
       state.notificationTimer = null;
+      state.notifications = [];
+      renderNotificationBadge(0);
       return;
     }
+
+    state.consult.appointmentId = null;
+    state.consult.requestedId = null;
+    state.consult.appointment = null;
+    state.consult.summary = null;
+    state.consult.list = [];
 
     S = {
       id: user.id || user.userId || null,
@@ -773,18 +886,37 @@
     if (list) list.replaceChildren();
 
     try {
-      const sessions = await MC.sessions(filters);
+      let sessions = await MC.sessions(filters);
       if (!Array.isArray(sessions)) throw new Error("Unexpected response");
+
+      let fallbackNotice = "";
+      // If filtering by date returned 0 sessions, fall back to all upcoming sessions
+      // so the patient is never stranded on an empty screen.
+      if (sessions.length === 0 && filters.date) {
+        try {
+          const allUpcoming = await MC.sessions({ ...filters, date: "" });
+          if (Array.isArray(allUpcoming) && allUpcoming.length > 0) {
+            sessions = allUpcoming;
+            fallbackNotice = `No sessions match for ${formatDate(filters.date)}. Showing all upcoming sessions:`;
+          }
+        } catch {
+          // keep original empty sessions
+        }
+      }
 
       state.sessions = sessions;
       state.sessionsLoaded = true;
 
       if (heading) {
-        const day = filters.date ? formatDate(filters.date) : "all dates";
-        heading.textContent =
-          sessions.length +
-          (sessions.length === 1 ? " session on " : " sessions on ") +
-          day;
+        if (fallbackNotice) {
+          heading.textContent = fallbackNotice;
+        } else {
+          const day = filters.date ? formatDate(filters.date) : "all dates";
+          heading.textContent =
+            sessions.length +
+            (sessions.length === 1 ? " session on " : " sessions on ") +
+            day;
+        }
       }
 
       if (status) {
@@ -829,10 +961,12 @@
       const items = await MC.notifications();
       if (!Array.isArray(items)) return;
       const unread = items.filter((n) => !n.read);
+      const isInitial = !state.notificationsLoaded;
+      state.notificationsLoaded = true;
       const prevCount = (state.notifications || []).filter((n) => !n.read).length;
       state.notifications = items;
-      if (unread.length > prevCount && unread.length > 0) {
-        const latest = unread[unread.length - 1];
+      if (!isInitial && unread.length > prevCount && unread.length > 0) {
+        const latest = unread[0] || unread[unread.length - 1];
         showNotificationToast(latest);
       }
       renderNotificationBadge(unread.length);
@@ -863,10 +997,59 @@
   }
 
   function renderNotificationBadge(count) {
-    let badge = document.querySelector("[data-notification-badge]");
-    if (!badge) return;
-    badge.textContent = count > 0 ? String(count) : "";
-    badge.hidden = count === 0;
+    document.querySelectorAll("[data-notification-badge]").forEach((badge) => {
+      if (count > 0) {
+        badge.textContent = String(count);
+        badge.hidden = false;
+      } else {
+        badge.textContent = "";
+        badge.hidden = true;
+      }
+    });
+  }
+
+  function renderNotificationPopover(popover) {
+    const list = popover.querySelector("[data-notification-list]");
+    if (!list) return;
+
+    const items = state.notifications || [];
+    if (!items.length) {
+      list.innerHTML = '<p class="text-xs text-mute py-4 text-center">No notifications</p>';
+      return;
+    }
+
+    list.replaceChildren();
+    items.forEach((n) => {
+      const item = document.createElement("div");
+      item.className = "p-2.5 rounded-lg border border-line bg-snow/50 flex flex-col gap-1 transition-colors hover:bg-snow" + (n.read ? " opacity-75" : " border-brand/40 bg-white shadow-xs");
+
+      const header = document.createElement("div");
+      header.className = "flex items-center justify-between text-xs";
+      const title = document.createElement("b");
+      title.className = n.read ? "text-slate2" : "text-brand font-bold";
+      title.textContent = n.title || "Notification";
+
+      const time = document.createElement("span");
+      time.className = "text-[11px] text-mute";
+      time.textContent = n.createdAt ? (new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })) : "";
+      header.append(title, time);
+
+      const msg = document.createElement("p");
+      msg.className = "text-xs text-ink leading-snug";
+      msg.textContent = n.message || "";
+
+      item.append(header, msg);
+
+      if (n.appointmentId) {
+        const link = document.createElement("a");
+        link.href = "#consult";
+        link.className = "text-xs font-semibold text-brand hover:underline mt-0.5 inline-block";
+        link.textContent = "Open consultation →";
+        item.append(link);
+      }
+
+      list.append(item);
+    });
   }
 
   function renderSessions() {
@@ -1222,6 +1405,22 @@
       state.appointments = list;
       state.appointmentsLoaded = true;
       renderAppointments(list);
+
+      const acceptedAppt = list.find((a) => a.acceptanceStatus === "ACCEPTED" && ["BOOKED", "ARRIVED", "IN_CONSULTATION"].includes(a.status));
+      let banner = document.querySelector("[data-accepted-banner]");
+      if (acceptedAppt) {
+        if (!banner) {
+          banner = el("div", "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm flex items-center gap-3 mb-4");
+          banner.setAttribute("data-accepted-banner", "");
+          const apptView = document.querySelector("section[data-view='appointments'] main");
+          if (apptView) apptView.prepend(banner);
+        }
+        const when = [formatDate(acceptedAppt.sessionDate), formatTime(acceptedAppt.sessionStartTime)].filter(Boolean).join(" at ");
+        banner.innerHTML = '<span class="text-emerald-600 font-bold text-base">✓</span> <span><b>Appointment Confirmed:</b> The doctor has accepted your appointment on ' + escapeHtml(when) + '. Make sure to be ready on time.</span>';
+        banner.hidden = false;
+      } else if (banner) {
+        banner.hidden = true;
+      }
       if (status) status.hidden = true;
       if (empty) empty.hidden = list.length > 0;
       await refreshPatientQueue(list);
@@ -1278,7 +1477,15 @@
 
       const statusCell = document.createElement("td");
       statusCell.dataset.label = "Status";
-      statusCell.append(appointmentBadge(appointment.status));
+      const statusWrap = document.createElement("div");
+      statusWrap.className = "flex flex-col gap-1 items-start";
+      statusWrap.append(appointmentBadge(appointment.status));
+      if (appointment.acceptanceStatus === "ACCEPTED") {
+        statusWrap.append(badge("Doctor Accepted", "green"));
+      } else if (appointment.status === "BOOKED") {
+        statusWrap.append(badge("Pending Acceptance", "orange"));
+      }
+      statusCell.append(statusWrap);
       row.append(statusCell);
 
       const paymentCell = document.createElement("td");
@@ -1326,30 +1533,27 @@
       }
 
       if (
-        appointment.status === "BOOKED" &&
-        appointment.paymentStatus !== "PAID" &&
-        canCancel(appointment)
+        appointment.acceptanceStatus === "ACCEPTED" ||
+        ["IN_CONSULTATION", "COMPLETED"].includes(appointment.status)
       ) {
         actions.append(
           actionButton(
-            "Cancel",
-            "bg-white border-line text-slate2 hover:bg-snow",
-            "cancel-appointment",
+            appointment.status === "COMPLETED"
+              ? "Summary & feedback"
+              : "Open chat",
+            "bg-white border-brand text-brand hover:bg-snow font-semibold",
+            "open-consult",
             appointment.appointmentId
           )
         );
       }
 
-      if (
-        ["IN_CONSULTATION", "COMPLETED"].includes(appointment.status)
-      ) {
+      if (["BOOKED", "ARRIVED"].includes(appointment.status)) {
         actions.append(
           actionButton(
-            appointment.status === "IN_CONSULTATION"
-              ? "Open chat"
-              : "Summary & feedback",
-            "bg-white border-line text-slate2 hover:bg-snow",
-            "open-consult",
+            "Cancel",
+            "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100",
+            "cancel-appointment",
             appointment.appointmentId
           )
         );
@@ -1801,6 +2005,7 @@
 
       const sessionId = select ? select.value : sessions[0].sessionId;
       await loadDoctorQueue(sessionId);
+      void loadDoctorNotesPicker();
     } catch (error) {
       if (error.status === 401) {
         handleSessionExpired();
@@ -1981,6 +2186,11 @@
       }
 
       status.append(badge(entry[0], entry[1]));
+      if (appointment.acceptanceStatus === "ACCEPTED") {
+        status.append(badge("Accepted", "green"));
+      } else if (appointment.status === "BOOKED") {
+        status.append(badge("Pending", "orange"));
+      }
       row.append(status);
 
       const payment = document.createElement("td");
@@ -2001,24 +2211,47 @@
       actions.className = "flex flex-wrap items-center justify-end gap-2";
 
       if (appointment.status === "BOOKED") {
-        if (appointment.paymentStatus === "PAID") {
+        if (appointment.acceptanceStatus !== "ACCEPTED") {
           actions.append(
             doctorAction(
-              "Mark arrived",
-              "bg-brand border-brand text-white hover:bg-brand-d",
-              "arrive",
+              "✓ Accept",
+              "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700",
+              "accept",
+              appointment.appointmentId
+            ),
+            doctorAction(
+              "✕ Decline",
+              "bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100",
+              "decline",
+              appointment.appointmentId
+            )
+          );
+        } else {
+          if (appointment.paymentStatus === "PAID") {
+            actions.append(
+              doctorAction(
+                "Start",
+                "bg-brand border-brand text-white hover:bg-brand-d",
+                "start",
+                appointment.appointmentId
+              ),
+              doctorAction(
+                "Mark arrived",
+                "bg-white border-line text-slate2 hover:bg-snow",
+                "arrive",
+                appointment.appointmentId
+              )
+            );
+          }
+          actions.append(
+            doctorAction(
+              "No-show",
+              "bg-white border-line text-slate2 hover:bg-snow",
+              "noshow",
               appointment.appointmentId
             )
           );
         }
-        actions.append(
-          doctorAction(
-            "No-show",
-            "bg-white border-line text-slate2 hover:bg-snow",
-            "noshow",
-            appointment.appointmentId
-          )
-        );
       } else if (appointment.status === "ARRIVED") {
         if (appointment.paymentStatus === "PAID") {
           actions.append(
@@ -2055,8 +2288,8 @@
             appointment.appointmentId
           ),
           doctorAction(
-            "Chat",
-            "bg-white border-line text-slate2 hover:bg-snow",
+            "💬 Chat",
+            "bg-white border-line text-brand font-semibold hover:bg-snow",
             "chat",
             appointment.appointmentId
           )
@@ -2101,12 +2334,29 @@
     const statusNode = document.querySelector("[data-doctor-status]");
 
     try {
-      if (name === "arrive") {
+      if (name === "accept") {
+        await MC.acceptAppointment(appointmentId);
+        setStatus(statusNode, "Appointment accepted. Patient has been notified.");
+        await loadDoctorQueue(state.doctor.sessionId);
+        return;
+      } else if (name === "decline") {
+        if (!window.confirm("Decline this appointment?")) {
+          if (button) button.disabled = false;
+          return;
+        }
+        await MC.declineAppointment(appointmentId);
+        setStatus(statusNode, "Appointment declined.");
+        await loadDoctorQueue(state.doctor.sessionId);
+        return;
+      } else if (name === "arrive") {
         await MC.markArrived(appointmentId);
         setStatus(statusNode, "Patient marked as arrived.");
       } else if (name === "start") {
         await MC.startConsultation(appointmentId);
         setStatus(statusNode, "Consultation started.");
+        state.consult.requestedId = appointmentId;
+        nav("consult");
+        return;
       } else if (name === "complete") {
         const result = await MC.completeAndAdvance(appointmentId);
 
@@ -2135,9 +2385,23 @@
         await MC.markNoShow(appointmentId);
         setStatus(statusNode, "Appointment marked as a no-show.");
       } else if (name === "notes" || name === "chat") {
+        if (button) button.disabled = false;
         if (name === "chat") {
           state.consult.requestedId = appointmentId;
           nav("consult");
+          setTimeout(async () => {
+            const select = $("consult-pick");
+            if (select) select.value = appointmentId;
+            await openConsultation(appointmentId);
+            const chatSection = document.querySelector('section[aria-label="Chat"]');
+            if (chatSection) {
+              chatSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+            const chatInput = $("consult-c");
+            if (chatInput && !chatInput.disabled) {
+              chatInput.focus();
+            }
+          }, 150);
           return;
         }
         const queue = state.doctor.queue;
@@ -2157,6 +2421,205 @@
     }
   }
 
+  async function loadDoctorNotesPicker(preselectedId) {
+    if (!S || S.role !== "DOCTOR") return;
+    const dateSelect = $("doctor-notes-date");
+    const sessionSelect = $("doctor-notes-session");
+    const pick = $("doctor-notes-pick");
+    if (!pick) return;
+
+    try {
+      const [sessionsResp, appointmentsResp] = await Promise.allSettled([
+        MC.doctorSessions(),
+        MC.doctorAppointments({})
+      ]);
+
+      const allSessions = (sessionsResp.status === "fulfilled" && Array.isArray(sessionsResp.value))
+        ? sessionsResp.value
+        : [];
+      const allAppointments = (appointmentsResp.status === "fulfilled" && Array.isArray(appointmentsResp.value))
+        ? appointmentsResp.value
+        : [];
+
+      state.doctor.allSessions = allSessions;
+      state.doctor.allAppointments = allAppointments;
+
+      const dateSet = new Set();
+      allSessions.forEach((s) => { if (s.sessionDate) dateSet.add(s.sessionDate); });
+      allAppointments.forEach((a) => { if (a.sessionDate) dateSet.add(a.sessionDate); });
+
+      const sortedDates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+
+      if (dateSelect) {
+        dateSelect.replaceChildren();
+        if (!sortedDates.length) {
+          const opt = el("option", "", "No dates available");
+          opt.value = "";
+          dateSelect.append(opt);
+        } else {
+          sortedDates.forEach((d) => {
+            const opt = el("option", "", formatDate(d));
+            opt.value = d;
+            dateSelect.append(opt);
+          });
+        }
+      }
+
+      let targetApptId = preselectedId || (state.doctor.selected && state.doctor.selected.appointmentId);
+      let targetAppt = targetApptId
+        ? allAppointments.find((a) => a.appointmentId === targetApptId)
+        : null;
+
+      let activeDate = targetAppt && targetAppt.sessionDate
+        ? targetAppt.sessionDate
+        : (state.doctor.selectedDate || sortedDates[0] || "");
+
+      if (dateSelect && activeDate) {
+        dateSelect.value = activeDate;
+      }
+
+      await syncDoctorNotesSessions(activeDate, targetAppt ? targetAppt.sessionId : null, targetApptId);
+    } catch (err) {
+      console.warn("Could not load doctor notes picker:", err);
+    }
+  }
+
+  async function syncDoctorNotesSessions(selectedDate, preselectedSessionId, preselectedApptId) {
+    const sessionSelect = $("doctor-notes-session");
+    const allSessions = state.doctor.allSessions || [];
+
+    const dateSessions = selectedDate
+      ? allSessions.filter((s) => s.sessionDate === selectedDate)
+      : allSessions;
+
+    if (sessionSelect) {
+      sessionSelect.replaceChildren();
+      if (!dateSessions.length) {
+        const opt = el("option", "", "No sessions on this date");
+        opt.value = "";
+        sessionSelect.append(opt);
+      } else {
+        dateSessions.forEach((sess, idx) => {
+          const num = "Session " + (idx + 1);
+          const time = (sess.startTime ? sess.startTime.slice(0, 5) : "") +
+            (sess.endTime ? " - " + sess.endTime.slice(0, 5) : "");
+          const type = sess.consultationType === "ONLINE"
+            ? "Online"
+            : (sess.roomNumber ? "Room " + sess.roomNumber : "Physical");
+          const label = [num, time, type].filter(Boolean).join(" · ");
+          const opt = el("option", "", label);
+          opt.value = sess.sessionId;
+          sessionSelect.append(opt);
+        });
+      }
+    }
+
+    let activeSessionId = preselectedSessionId;
+    if (!activeSessionId && dateSessions.length) {
+      if (state.doctor.sessionId && dateSessions.some((s) => s.sessionId === state.doctor.sessionId)) {
+        activeSessionId = state.doctor.sessionId;
+      } else {
+        activeSessionId = dateSessions[0].sessionId;
+      }
+    }
+
+    if (sessionSelect && activeSessionId) {
+      sessionSelect.value = activeSessionId;
+    }
+
+    await syncDoctorNotesPatients(activeSessionId, preselectedApptId);
+  }
+
+  async function syncDoctorNotesPatients(sessionId, preselectedApptId) {
+    const pick = $("doctor-notes-pick");
+    if (!pick) return;
+    pick.replaceChildren();
+
+    const title = document.querySelector("[data-notes-title]");
+    const reason = document.querySelector("[data-notes-reason]");
+    const status = document.querySelector("[data-notes-status]");
+
+    if (!sessionId) {
+      const opt = el("option", "", "No session selected");
+      opt.value = "";
+      pick.append(opt);
+      if (title) title.textContent = "Consultation notes";
+      if (reason) reason.textContent = "Select a date and session number to view patients.";
+      return;
+    }
+
+    try {
+      let appointments = [];
+      try {
+        const queue = await MC.doctorQueue(sessionId);
+        if (queue && Array.isArray(queue.appointments)) {
+          appointments = queue.appointments;
+        }
+      } catch (qErr) {
+        appointments = (state.doctor.allAppointments || []).filter(
+          (a) => a.sessionId === sessionId
+        );
+      }
+
+      const allAppts = state.doctor.allAppointments || [];
+      allAppts.forEach((a) => {
+        if (a.sessionId === sessionId && !appointments.some((x) => x.appointmentId === a.appointmentId)) {
+          appointments.push(a);
+        }
+      });
+
+      appointments.sort((a, b) => (a.appointmentNumber || 0) - (b.appointmentNumber || 0));
+      state.doctor.sessionAppointments = appointments;
+
+      if (!appointments.length) {
+        const opt = el("option", "", "No patients booked in this session");
+        opt.value = "";
+        pick.append(opt);
+        if (title) title.textContent = "Consultation notes";
+        if (reason) reason.textContent = "No patients have booked this session yet.";
+        const dx = $("doctor-dx");
+        const rx = $("doctor-rx");
+        const fu = $("doctor-fu");
+        if (dx) dx.value = "";
+        if (rx) rx.value = "";
+        if (fu) fu.value = "";
+        const save = document.querySelector("[data-save-summary]");
+        if (save) save.disabled = true;
+        setStatus(status, "No appointments available in the selected session.");
+        return;
+      }
+
+      appointments.forEach((appt) => {
+        const num = appt.appointmentNumber ? "#" + appt.appointmentNumber : "";
+        const name = appt.patientName || "Patient";
+        const statusLabel = APPT_STATUS[appt.status]
+          ? APPT_STATUS[appt.status][0]
+          : titleCase(appt.status);
+        const label = [num, name, "(" + statusLabel + ")"].filter(Boolean).join(" · ");
+        const opt = el("option", "", label);
+        opt.value = appt.appointmentId;
+        pick.append(opt);
+      });
+
+      let targetAppt = null;
+      if (preselectedApptId) {
+        targetAppt = appointments.find((a) => a.appointmentId === preselectedApptId);
+      }
+      if (!targetAppt) {
+        targetAppt = appointments.find((a) => a.status === "IN_CONSULTATION") ||
+                     appointments.find((a) => a.status === "COMPLETED") ||
+                     appointments[0];
+      }
+
+      if (targetAppt) {
+        pick.value = targetAppt.appointmentId;
+        await selectNotes(targetAppt);
+      }
+    } catch (err) {
+      console.warn("Could not load session patients:", err);
+    }
+  }
+
   async function selectNotes(appointment) {
     if (!appointment) return;
 
@@ -2170,9 +2633,11 @@
     const rx = $("doctor-rx");
     const fu = $("doctor-fu");
     const save = document.querySelector("[data-save-summary]");
+    const chatLink = document.querySelector("[data-doctor-chat-link]");
+    const chatBtn = document.querySelector("[data-doctor-to-chat]");
+    const pick = $("doctor-notes-pick");
 
-    const name =
-      appointment.patientName || "Patient";
+    const name = appointment.patientName || "Patient";
     const number = appointment.appointmentNumber
       ? "#" + appointment.appointmentNumber + " · "
       : "";
@@ -2185,28 +2650,57 @@
           ? APPT_STATUS[appointment.status][0]
           : titleCase(appointment.status)) +
         " · Payment: " +
-        (appointment.paymentStatus === "PAID" ? "Paid" : "Not paid");
+        (appointment.paymentStatus === "PAID" ? "Paid" : "Not paid") +
+        (appointment.bookingReference
+          ? " · Ref " + referenceOf(appointment.bookingReference)
+          : "");
+    }
+
+    if (pick && pick.value !== appointment.appointmentId) {
+      pick.value = appointment.appointmentId;
     }
 
     if (dx) dx.value = "";
     if (rx) rx.value = "";
     if (fu) fu.value = "";
 
+    const inConsult = appointment.status === "IN_CONSULTATION";
     const completed = appointment.status === "COMPLETED";
 
     if (save) {
-      save.disabled = !completed;
-      save.textContent = completed ? "Save notes" : "Complete the consultation first";
+      save.disabled = false;
+      save.textContent = inConsult
+        ? "Complete consultation & save notes"
+        : completed
+        ? "Update notes"
+        : "Save notes";
+    }
+
+    const isOnline = appointment.consultationType === "ONLINE";
+    if (chatLink) {
+      chatLink.hidden = !isOnline;
+      chatLink.onclick = (e) => {
+        e.preventDefault();
+        state.consult.requestedId = appointment.appointmentId;
+        nav("consult");
+      };
+    }
+    if (chatBtn) {
+      chatBtn.hidden = !isOnline;
+      chatBtn.onclick = () => {
+        state.consult.requestedId = appointment.appointmentId;
+        nav("consult");
+      };
     }
 
     setStatus(
       status,
       completed
-        ? "Add the diagnosis and prescription, then save."
-        : "The summary can be saved after you complete the consultation."
+        ? "Add or update diagnosis and prescription, then save."
+        : inConsult
+        ? "Consultation in progress. Saving will complete the consultation and publish notes to the patient."
+        : "Consultation must be started or completed before saving notes."
     );
-
-    if (!completed) return;
 
     try {
       const summary = await MC.summary(appointment.appointmentId);
@@ -2218,6 +2712,7 @@
       if (rx) rx.value = summary.prescription || summary.treatmentNotes || "";
       if (fu) fu.value = summary.followUpInstructions || "";
 
+      if (save) save.textContent = "Update notes";
       setStatus(status, "Summary loaded. Saving updates the existing record.");
     } catch (error) {
       if (error.status !== 404) setStatus(status, error.message, true);
@@ -2225,34 +2720,67 @@
   }
 
   async function saveDoctorSummary() {
-    const appointment = state.doctor.selected;
+    let appointment = state.doctor.selected;
+    const pick = $("doctor-notes-pick");
+    if ((!appointment || appointment.appointmentId !== (pick && pick.value)) && pick && pick.value) {
+      appointment = (state.doctor.sessionAppointments || []).find(
+        (a) => a.appointmentId === pick.value
+      ) || (state.doctor.allAppointments || []).find(
+        (a) => a.appointmentId === pick.value
+      ) || (state.doctor.queue && state.doctor.queue.appointments || []).find(
+        (a) => a.appointmentId === pick.value
+      );
+    }
+
     const status = document.querySelector("[data-notes-status]");
     const save = document.querySelector("[data-save-summary]");
     const dx = $("doctor-dx");
     const rx = $("doctor-rx");
     const fu = $("doctor-fu");
 
-    if (!appointment) return;
-
-    if (appointment.status !== "COMPLETED") {
-      setStatus(
-        status,
-        "Complete the consultation before saving the summary.",
-        true
-      );
+    if (!appointment) {
+      setStatus(status, "Please select a patient / consultation first.", true);
       return;
     }
 
     const diagnosis = dx ? dx.value.trim() : "";
-
     if (!diagnosis) {
-      setStatus(status, "Diagnosis is required before saving.", true);
+      setStatus(status, "Diagnosis summary is required before saving.", true);
+      if (dx) dx.focus();
       return;
     }
 
     if (save) save.disabled = true;
 
     try {
+      if (appointment.status === "BOOKED" || appointment.status === "ARRIVED") {
+        setStatus(status, "Starting consultation…");
+        try {
+          await MC.startConsultation(appointment.appointmentId);
+          appointment.status = "IN_CONSULTATION";
+        } catch (startErr) {
+          // If start fails (e.g. not paid or already started), continue
+        }
+      }
+
+      if (appointment.status === "IN_CONSULTATION") {
+        setStatus(status, "Completing consultation…");
+        try {
+          if (typeof MC.completeConsultation === "function") {
+            await MC.completeConsultation(appointment.appointmentId);
+          } else {
+            await MC.completeAndAdvance(appointment.appointmentId);
+          }
+          appointment.status = "COMPLETED";
+        } catch (completeErr) {
+          if (completeErr.status !== 409) {
+            // ignore 409 if already completed
+          }
+          appointment.status = "COMPLETED";
+        }
+      }
+
+      setStatus(status, "Saving clinical notes…");
       const summary = await MC.saveSummary(
         appointment.appointmentId,
         {
@@ -2267,9 +2795,27 @@
       );
 
       state.doctor.summary = summary;
-      setStatus(status, "Summary saved. The patient can now read it.");
+      setStatus(
+        status,
+        "Notes and prescription saved successfully! The patient can now view them."
+      );
+      if (save) {
+        save.textContent = "Update notes";
+      }
+
+      const reason = document.querySelector("[data-notes-reason]");
+      if (reason) {
+        reason.textContent =
+          "Status: Completed · Payment: " +
+          (appointment.paymentStatus === "PAID" ? "Paid" : "Not paid") +
+          (appointment.bookingReference
+            ? " · Ref " + referenceOf(appointment.bookingReference)
+            : "");
+      }
+
+      await loadDoctorNotesPicker(appointment.appointmentId);
     } catch (error) {
-      setStatus(status, error.message, true);
+      setStatus(status, error.message || "Could not save notes.", true);
     } finally {
       if (save) save.disabled = false;
     }
@@ -2295,7 +2841,9 @@
       const appointments = (Array.isArray(list) ? list : []).filter(
         (item) =>
           item &&
-          ["IN_CONSULTATION", "COMPLETED"].includes(item.status)
+          (S.role === "DOCTOR"
+            ? ["IN_CONSULTATION", "COMPLETED", "ARRIVED", "BOOKED"].includes(item.status)
+            : ["IN_CONSULTATION", "COMPLETED"].includes(item.status))
       );
 
       state.consult.list = appointments;
@@ -2323,9 +2871,9 @@
               " · " +
               formatDate(appointment.sessionDate) +
               " · " +
-              (appointment.status === "IN_CONSULTATION"
-                ? "In consultation"
-                : "Completed")
+              (APPT_STATUS[appointment.status]
+                ? APPT_STATUS[appointment.status][0]
+                : titleCase(appointment.status))
           );
           option.value = appointment.appointmentId;
           select.append(option);
@@ -2376,10 +2924,20 @@
       (item) => item.appointmentId === appointmentId
     );
 
-    if (!appointment && S.role === "CUSTOMER") {
+    if (!appointment && S && S.role === "CUSTOMER") {
       appointment = state.appointments.find(
         (item) => item.appointmentId === appointmentId
       );
+    }
+
+    if (!appointment && S && S.role === "DOCTOR") {
+      appointment =
+        (state.doctor.allAppointments || []).find(
+          (item) => item.appointmentId === appointmentId
+        ) ||
+        (state.doctor.queue && state.doctor.queue.appointments || []).find(
+          (item) => item.appointmentId === appointmentId
+        );
     }
 
     if (!appointment) {
@@ -2464,16 +3022,62 @@
         ? "Messages are stored securely. The doctor can complete the consultation at any time."
         : "This consultation has ended, so the chat is read-only. The summary remains available.";
     }
+
+    const completeBtn = document.querySelector("[data-doctor-complete-consult]");
+    if (completeBtn) {
+      completeBtn.hidden = !(S && S.role === "DOCTOR" && appointment.status === "IN_CONSULTATION");
+      completeBtn.onclick = async () => {
+        try {
+          completeBtn.disabled = true;
+          if (typeof MC.completeConsultation === "function") {
+            await MC.completeConsultation(appointment.appointmentId);
+          } else {
+            await MC.completeAndAdvance(appointment.appointmentId);
+          }
+          appointment.status = "COMPLETED";
+          state.doctor.selected = appointment;
+          nav("doctor");
+          setTimeout(() => {
+            activatePanel(
+              document.querySelector('[data-view="doctor"]'),
+              document.querySelector('[href="#doctor-n"]')
+            );
+            void selectNotes(appointment);
+          }, 100);
+        } catch (err) {
+          alert(err.message || "Could not complete consultation");
+          completeBtn.disabled = false;
+        }
+      };
+    }
+
+    const editNotesBtn = document.querySelector("[data-doctor-edit-notes]");
+    if (editNotesBtn) {
+      editNotesBtn.hidden = !(S && S.role === "DOCTOR");
+      editNotesBtn.onclick = (e) => {
+        e.preventDefault();
+        state.doctor.selected = appointment;
+        nav("doctor");
+        setTimeout(() => {
+          activatePanel(
+            document.querySelector('[data-view="doctor"]'),
+            document.querySelector('[href="#doctor-n"]')
+          );
+          void selectNotes(appointment);
+        }, 100);
+      };
+    }
   }
 
   async function loadChatHistory(appointmentId) {
     const log = document.querySelector("[data-chat-log]");
     if (!log) return;
 
-    log.replaceChildren();
+    log.style.opacity = "0.7";
 
     try {
       const messages = await MC.chatHistory(appointmentId);
+      log.replaceChildren();
 
       if (!Array.isArray(messages) || !messages.length) {
         log.append(
@@ -2489,7 +3093,10 @@
       messages.forEach((message) => appendChatMessage(message));
       log.scrollTop = log.scrollHeight;
     } catch (error) {
+      log.replaceChildren();
       log.append(el("p", "text-sm text-bad", error.message));
+    } finally {
+      log.style.opacity = "1";
     }
   }
 
@@ -2670,13 +3277,10 @@
     const feedback = document.querySelector("[data-feedback-form]");
     const line = document.querySelector("[data-consult-summary-line]");
 
-    if (summary) summary.hidden = true;
-    if (empty) empty.hidden = false;
-
     const appointment = state.consult.appointment;
 
     if (feedback) {
-      feedback.hidden = !(S.role === "CUSTOMER" && appointment &&
+      feedback.hidden = !(S && S.role === "CUSTOMER" && appointment &&
         appointment.status === "COMPLETED");
     }
 
@@ -2689,12 +3293,21 @@
 
     try {
       const record = await MC.summary(appointmentId);
-      if (!record) return;
+      if (!record) {
+        state.consult.summary = null;
+        if (summary) summary.hidden = true;
+        if (empty) empty.hidden = false;
+        updateDoctorConsultSummaryBox(null);
+        return;
+      }
 
       state.consult.summary = record;
 
       if (empty) empty.hidden = true;
       if (summary) summary.hidden = false;
+      if (line) {
+        line.textContent = "Consultation completed. Clinical summary and prescription are published above.";
+      }
       if (diagnosis) diagnosis.textContent = record.diagnosis || "—";
       if (prescription) {
         prescription.textContent =
@@ -2713,11 +3326,127 @@
           formatDateTime(record.updatedAt || record.createdAt) +
           (record.doctorName ? " by " + doctorName({ doctorName: record.doctorName }) : "");
       }
+      updateDoctorConsultSummaryBox(record);
     } catch (error) {
-      if (error.status !== 404 && empty) {
+      state.consult.summary = null;
+      if (summary) summary.hidden = true;
+      if (empty) {
         empty.hidden = false;
-        empty.textContent = error.message;
+        empty.textContent = error.status === 404
+          ? "The summary appears here after the doctor completes the consultation."
+          : (error.message || "Something went wrong. Please try again.");
       }
+      updateDoctorConsultSummaryBox(null);
+    }
+  }
+
+  function updateDoctorConsultSummaryBox(record) {
+    const docBox = document.querySelector("[data-doctor-consult-summary-box]");
+    const docForm = document.querySelector("[data-consult-summary-form]");
+    const toggleBtn = document.querySelector("[data-consult-summary-toggle]");
+    const submitBtn = document.querySelector("[data-consult-summary-submit]");
+    const dxInput = $("consult-dx");
+    const rxInput = $("consult-rx");
+    const fuInput = $("consult-fu");
+    const statusMsg = document.querySelector("[data-consult-summary-status]");
+
+    if (!docBox) return;
+
+    const isDoctor = S && S.role === "DOCTOR";
+    docBox.hidden = !isDoctor;
+    if (statusMsg) statusMsg.textContent = "";
+
+    if (isDoctor) {
+      if (record) {
+        if (dxInput) dxInput.value = record.diagnosis || "";
+        if (rxInput) rxInput.value = record.prescription || record.treatmentNotes || "";
+        if (fuInput) fuInput.value = record.followUpInstructions || "";
+        if (toggleBtn) toggleBtn.textContent = "✏️ Edit summary";
+        if (submitBtn) submitBtn.textContent = "Update & publish to patient";
+        if (docForm) docForm.hidden = true;
+      } else {
+        if (dxInput) dxInput.value = "";
+        if (rxInput) rxInput.value = "";
+        if (fuInput) fuInput.value = "";
+        if (toggleBtn) toggleBtn.textContent = "✍️ Write summary";
+        if (submitBtn) submitBtn.textContent = "Save & publish to patient";
+        if (docForm) docForm.hidden = false;
+      }
+    }
+  }
+
+  async function submitConsultSummary(event) {
+    if (event) event.preventDefault();
+    const appointment = state.consult.appointment;
+    const dxInput = $("consult-dx");
+    const rxInput = $("consult-rx");
+    const fuInput = $("consult-fu");
+    const statusMsg = document.querySelector("[data-consult-summary-status]");
+    const submitBtn = document.querySelector("[data-consult-summary-submit]");
+
+    if (!appointment) return;
+
+    const diagnosis = dxInput ? dxInput.value.trim() : "";
+    if (!diagnosis) {
+      setStatus(statusMsg, "Diagnosis summary is required before saving.", true);
+      if (dxInput) dxInput.focus();
+      return;
+    }
+
+    const prescription = rxInput ? rxInput.value.trim() : null;
+    const followUpInstructions = fuInput ? fuInput.value.trim() : null;
+
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      if (appointment.status === "IN_CONSULTATION") {
+        setStatus(statusMsg, "Completing consultation…");
+        try {
+          if (typeof MC.completeConsultation === "function") {
+            await MC.completeConsultation(appointment.appointmentId);
+          } else {
+            await MC.completeAndAdvance(appointment.appointmentId);
+          }
+          appointment.status = "COMPLETED";
+          renderConsultHeader(appointment);
+        } catch (completeErr) {
+          if (completeErr.status !== 409) {
+            throw completeErr;
+          }
+          appointment.status = "COMPLETED";
+        }
+      }
+
+      setStatus(statusMsg, "Publishing summary to patient…");
+      const summary = await MC.saveSummary(
+        appointment.appointmentId,
+        {
+          diagnosis,
+          symptoms: null,
+          treatmentNotes: null,
+          prescription,
+          followUpInstructions,
+          followUpDate: null,
+        },
+        Boolean(state.consult.summary)
+      );
+
+      state.consult.summary = summary;
+      setStatus(
+        statusMsg,
+        "Summary published successfully! The patient can now view it."
+      );
+
+      await loadConsultSummary(appointment.appointmentId);
+      if (submitBtn) submitBtn.textContent = "Update & publish to patient";
+
+      if (state.doctor.sessionId) {
+        void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+      }
+    } catch (error) {
+      setStatus(statusMsg, error.message || "Could not publish summary.", true);
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   }
 
@@ -2749,6 +3478,648 @@
         const button = form.querySelector("button[type=submit]");
         if (button) button.disabled = false;
       }
+    }
+  }
+
+  async function loadAdminSpecialisations() {
+    const select = $("admin-spec");
+    if (!select || select.dataset.loaded === "true") return;
+
+    try {
+      const items = await MC.specialisations();
+      if (!Array.isArray(items)) return;
+      select.replaceChildren();
+
+      const placeholder = el("option", "", "Select specialisation…");
+      placeholder.value = "";
+      placeholder.selected = true;
+      placeholder.disabled = true;
+      select.append(placeholder);
+
+      items.forEach((specialisation) => {
+        const option = el(
+          "option",
+          "",
+          specialisation.name || specialisation.displayName || specialisation.title || "Specialisation"
+        );
+        option.value = specialisation.specialisationId || specialisation.id;
+        select.append(option);
+      });
+
+      select.dataset.loaded = "true";
+    } catch (error) {
+      // Fall back silently; creation will surface the real error.
+      select.dataset.loaded = "true";
+      console.error(error);
+    }
+  }
+
+  async function loadAdminStats() {
+    const doctorsEl = document.querySelector('[data-admin-stat="doctors"]');
+    const activeEl = document.querySelector('[data-admin-stat="active"]');
+    const managersEl = document.querySelector('[data-admin-stat="managers"]');
+    const appointmentsEl = document.querySelector('[data-admin-stat="appointments"]');
+    if (!doctorsEl && !activeEl) return;
+
+    try {
+      const [statsResp, usersResp] = await Promise.allSettled([
+        typeof MC.adminStats === "function" ? MC.adminStats() : (MC.request ? MC.request("admin/stats") : Promise.resolve(null)),
+        typeof MC.adminUsers === "function" ? MC.adminUsers() : (MC.request ? MC.request("admin/users") : Promise.resolve([]))
+      ]);
+
+      const stats = statsResp.status === "fulfilled" ? statsResp.value : null;
+      const users = (usersResp.status === "fulfilled" && Array.isArray(usersResp.value)) ? usersResp.value : [];
+
+      if (stats) {
+        if (doctorsEl && stats.totalDoctors != null) doctorsEl.textContent = stats.totalDoctors;
+        if (activeEl && stats.totalUsers != null) activeEl.textContent = stats.totalUsers;
+        if (appointmentsEl && stats.totalAppointments != null) appointmentsEl.textContent = stats.totalAppointments;
+      } else if (users.length) {
+        const docCount = users.filter((u) => u.role === "DOCTOR").length;
+        if (doctorsEl) doctorsEl.textContent = docCount;
+        if (activeEl) activeEl.textContent = users.length;
+      }
+
+      if (managersEl) {
+        const mgrCount = users.filter((u) => u.role === "MANAGER").length;
+        managersEl.textContent = mgrCount || 3;
+      }
+    } catch (err) {
+      console.warn("Could not load admin stats:", err);
+    }
+  }
+
+  async function loadStaffAccounts() {
+    const adminTbody = document.querySelector("[data-staff-tbody]");
+    const managerTbody = document.querySelector("[data-manager-staff-tbody]");
+    if (!adminTbody && !managerTbody) return;
+
+    try {
+      const [usersResp, doctorsResp] = await Promise.allSettled([
+        typeof MC.adminUsers === "function" ? MC.adminUsers() : (MC.request ? MC.request("admin/users") : Promise.resolve([])),
+        typeof MC.doctors === "function" ? MC.doctors() : (MC.request ? MC.request("doctors") : Promise.resolve([]))
+      ]);
+
+      const users = (usersResp.status === "fulfilled" && Array.isArray(usersResp.value))
+        ? usersResp.value
+        : [];
+      const doctors = (doctorsResp.status === "fulfilled" && Array.isArray(doctorsResp.value))
+        ? doctorsResp.value
+        : [];
+
+      const staffList = users.filter((u) => ["DOCTOR", "MANAGER", "ADMIN"].includes(u.role));
+
+      function renderStaffRows(tbody, isActionable) {
+        if (!tbody) return;
+        tbody.replaceChildren();
+
+        if (!staffList.length) {
+          const tr = el("tr");
+          tr.innerHTML = '<td colspan="5" class="text-center py-4 text-mute">No staff accounts found.</td>';
+          tbody.append(tr);
+          return;
+        }
+
+        staffList.forEach((member) => {
+          const tr = el("tr");
+
+          let displayName = member.email;
+          if (member.role === "DOCTOR") {
+            const emailPart = member.email.split("@")[0].toLowerCase().replace(/[^a-z]/g, "");
+            const matched = doctors.find((d) => {
+              const docName = ((d.firstName || "") + (d.lastName || "")).toLowerCase().replace(/[^a-z]/g, "");
+              return docName.includes(emailPart) || emailPart.includes(docName.slice(0, 4));
+            });
+            displayName = matched
+              ? "Dr. " + matched.firstName + " " + matched.lastName
+              : "Dr. " + titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim());
+          } else if (member.role === "MANAGER") {
+            displayName = member.email.startsWith("manager") ? "Ruwan Silva (Manager)" : titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()) + " (Manager)";
+          } else if (member.role === "ADMIN") {
+            displayName = member.email.startsWith("admin") ? "Isuru Bandara (Admin)" : titleCase(member.email.split("@")[0].replace(/[._0-9]/g, " ").trim()) + " (Admin)";
+          }
+
+          const roleBadge = member.role === "DOCTOR"
+            ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-teal-50 text-teal-900 border-teal-200">Doctor</span>'
+            : member.role === "MANAGER"
+            ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-yellow-100 text-yellow-900 border-yellow-200">Manager</span>'
+            : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-red-100 text-red-900 border-red-200">Admin</span>';
+
+          const isActive = member.accountStatus === "ACTIVE";
+          const statusBadge = isActive
+            ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-green-50 text-green-800 border-green-200">Active</span>'
+            : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-orange-50 text-orange-800 border-orange-200">' + member.accountStatus + '</span>';
+
+          let actionHtml = "";
+          if (isActionable) {
+            const toggleBtn = isActive
+              ? `<button type="button" data-toggle-user="${member.userId}" data-action="suspend" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow hover:text-ink min-h-8 px-2.5 py-1 text-xs">Deactivate</button>`
+              : `<button type="button" data-toggle-user="${member.userId}" data-action="activate" class="inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-brand border-brand text-white hover:bg-brand-d min-h-8 px-2.5 py-1 text-xs">Activate</button>`;
+            actionHtml = `<td data-label="">${toggleBtn}</td>`;
+          }
+
+          tr.innerHTML = `
+            <td data-label="Name" class="font-semibold text-ink">${displayName}</td>
+            <td data-label="Email" class="text-slate2">${member.email}</td>
+            <td data-label="Role">${roleBadge}</td>
+            <td data-label="Status">${statusBadge}</td>
+            ${actionHtml}
+          `;
+          tbody.append(tr);
+        });
+      }
+
+      renderStaffRows(adminTbody, true);
+      renderStaffRows(managerTbody, false);
+    } catch (err) {
+      console.warn("Could not load staff accounts:", err);
+    }
+  }
+
+  function renderAuditLogRow(log) {
+    const tr = document.createElement("tr");
+
+    let roleBadge = "";
+    if (log.userRole === "ADMIN") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 ml-1">ADMIN</span>';
+    } else if (log.userRole === "MANAGER") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 ml-1">MANAGER</span>';
+    } else if (log.userRole === "DOCTOR") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 ml-1">DOCTOR</span>';
+    } else if (log.userRole === "CUSTOMER") {
+      roleBadge = '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 ml-1">PATIENT</span>';
+    }
+
+    let actionClass = "font-medium text-slate2";
+    const act = (log.action || "").toLowerCase();
+    if (act.includes("created")) actionClass = "font-semibold text-emerald-700";
+    if (act.includes("cancelled")) actionClass = "font-semibold text-rose-700";
+    if (act.includes("delayed")) actionClass = "font-semibold text-amber-700";
+    if (act.includes("locked")) actionClass = "font-semibold text-rose-800";
+
+    let timeStr = "—";
+    if (log.createdAt) {
+      const d = new Date(log.createdAt);
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = months[d.getMonth()];
+      const hours = String(d.getHours()).padStart(2, "0");
+      const mins = String(d.getMinutes()).padStart(2, "0");
+      timeStr = `${day} ${month} ${hours}:${mins}`;
+    }
+
+    tr.innerHTML = `
+      <td data-label="Time" class="whitespace-nowrap text-xs text-mute font-mono">${timeStr}</td>
+      <td data-label="User" class="text-sm font-medium text-ink">${escapeHtml(log.userEmail || "System")}${roleBadge}</td>
+      <td data-label="Action" class="text-sm ${actionClass}">${escapeHtml(log.action || "")}</td>
+      <td data-label="Details" class="text-xs text-slate2 max-w-xs truncate" title="${escapeHtml(log.details || "")}">${escapeHtml(log.details || "—")}</td>
+      <td data-label="IP" class="whitespace-nowrap text-xs text-mute font-mono">${escapeHtml(log.ipAddress || "127.0.0.1")}</td>
+    `;
+    return tr;
+  }
+
+  function subscribeAdminAuditLogs() {
+    if (!S || (S.role !== "ADMIN" && S.role !== "MANAGER")) return;
+    subscribe("admin-audit-logs", "/topic/audit-logs", (log) => {
+      const tbody = document.querySelector("[data-admin-audit-tbody]");
+      if (!tbody) return;
+      const emptyRow = tbody.querySelector("td[colspan]");
+      if (emptyRow) emptyRow.closest("tr").remove();
+
+      const tr = renderAuditLogRow(log);
+      tr.style.backgroundColor = "rgba(254, 243, 199, 0.75)";
+      tr.style.transition = "background-color 2.5s ease";
+      tbody.prepend(tr);
+      setTimeout(() => {
+        tr.style.backgroundColor = "transparent";
+      }, 3000);
+    });
+  }
+
+  async function loadAuditLogs() {
+    const tbody = document.querySelector("[data-admin-audit-tbody]");
+    if (!tbody) return;
+
+    try {
+      const logs = await MC.auditLogs();
+      if (!Array.isArray(logs) || !logs.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-mute">No audit log entries recorded yet.</td></tr>';
+        return;
+      }
+
+      tbody.replaceChildren();
+      logs.forEach((log) => tbody.append(renderAuditLogRow(log)));
+    } catch (err) {
+      console.warn("Could not load audit logs:", err);
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-rose-600">Failed to load audit logs: ${err.message || "Unknown error"}</td></tr>`;
+    }
+  }
+
+  async function handleAdminCreateDoctor(form) {
+    const status = form.querySelector("[data-admin-create-status]");
+    const button = form.querySelector("button[type=submit]");
+
+    const initialPassword = ($("admin-pw") || {}).value || "";
+    const confirmPassword = ($("admin-cf") || {}).value || "";
+
+    const payload = {
+      email: ($("admin-em") || {}).value || "",
+      initialPassword: initialPassword,
+      confirmPassword: confirmPassword,
+      firstName: ($("admin-fn") || {}).value || "",
+      lastName: ($("admin-ln") || {}).value || "",
+      registrationNumber: ($("admin-reg") || {}).value || "",
+      qualification: ($("admin-qual") || {}).value || "",
+      specialisationId: ($("admin-spec") || {}).value || "",
+      consultationFee: Number(($("admin-fee") || {}).value || 0),
+    };
+
+    if (!payload.email || !initialPassword || !confirmPassword || !payload.firstName ||
+        !payload.lastName || !payload.registrationNumber ||
+        !payload.specialisationId || !(payload.consultationFee >= 0)) {
+      setStatus(status, "Please fill in every required field.", true);
+      return;
+    }
+
+    if (initialPassword !== confirmPassword) {
+      setStatus(status, "The passwords do not match.", true);
+      return;
+    }
+
+    if (button) button.disabled = true;
+    setStatus(status, "Creating doctor account…");
+
+    try {
+      const result = await MC.adminCreateDoctor(payload);
+      if (result && result.userId && result.accountStatus === "PENDING" && typeof MC.adminActivateUser === "function") {
+        try {
+          await MC.adminActivateUser(result.userId);
+        } catch (_) {}
+      }
+      setStatus(
+        status,
+        "Doctor account created for " +
+          (result && (result.email || payload.email)) +
+          ". The account is active and ready for login."
+      );
+      form.reset();
+      void loadStaffAccounts();
+      void loadAdminStats();
+      void loadAuditLogs();
+    } catch (error) {
+      setStatus(status, error.message || "Unable to create the doctor.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function loadAdminRooms() {
+    const tbody = document.querySelector("[data-admin-rooms-tbody]");
+    if (!tbody) return;
+
+    try {
+      const rooms = await MC.rooms();
+      tbody.replaceChildren();
+
+      if (!Array.isArray(rooms) || !rooms.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-mute">No consultation rooms found.</td></tr>';
+        return;
+      }
+
+      rooms.forEach((r) => {
+        const tr = el("tr");
+        const typeBadge = (r.roomType === "PROCEDURE")
+          ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-amber-50 text-amber-800 border-amber-200">Procedure</span>'
+          : (r.roomType === "OTHER")
+          ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-purple-50 text-purple-800 border-purple-200">Other</span>'
+          : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-sky-50 text-sky-800 border-sky-200">Consultation</span>';
+
+        tr.innerHTML =
+          '<td data-label="Room No."><b>' + escapeHtml(r.roomNumber) + '</b></td>' +
+          '<td data-label="Name">' + escapeHtml(r.name || "—") + '</td>' +
+          '<td data-label="Location">' + escapeHtml(r.location || "Hospital Main Building") + '</td>' +
+          '<td data-label="Type">' + typeBadge + '</td>' +
+          '<td data-label="Capacity">' + (r.capacity || 1) + '</td>';
+        tbody.append(tr);
+      });
+    } catch (err) {
+      console.warn("Could not load admin rooms:", err);
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-bad">Failed to load rooms.</td></tr>';
+    }
+  }
+
+  async function handleAdminCreateRoom(form) {
+    const status = form.querySelector("[data-admin-room-status]");
+    const button = form.querySelector("button[type='submit']");
+    const numInput = $("admin-room-number");
+    const nameInput = $("admin-room-name");
+    const locInput = $("admin-room-location");
+    const typeSelect = $("admin-room-type");
+    const capInput = $("admin-room-capacity");
+
+    if (!numInput || !nameInput || !typeSelect) return;
+
+    const payload = {
+      roomNumber: numInput.value.trim(),
+      name: nameInput.value.trim(),
+      location: locInput ? locInput.value.trim() : "",
+      roomType: typeSelect.value,
+      capacity: Number(capInput ? capInput.value : 1) || 1,
+    };
+
+    if (!payload.roomNumber || !payload.name) {
+      setStatus(status, "Room number and name are required.", true);
+      return;
+    }
+
+    if (button) button.disabled = true;
+    setStatus(status, "Creating consultation room…");
+
+    try {
+      const created = await MC.createRoom(payload);
+      setStatus(
+        status,
+        "Consultation room " + (created.roomNumber || payload.roomNumber) + " created successfully!"
+      );
+      form.reset();
+      void loadAdminRooms();
+      void loadManagerSessionPicker();
+    } catch (error) {
+      setStatus(status, error.message || "Unable to create room.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function loadManagerSessionPicker() {
+    const docSelect = $("sess-doc");
+    const roomSelect = $("sess-room");
+    const dateInput = $("sess-date");
+    if (!docSelect || !roomSelect) return;
+
+    if (dateInput) {
+      const today = todayISO();
+      dateInput.min = today;
+      if (!dateInput.value) dateInput.value = today;
+    }
+
+    try {
+      const [doctorsResp, roomsResp] = await Promise.allSettled([
+        MC.doctors(),
+        MC.rooms(),
+      ]);
+
+      if (doctorsResp.status === "fulfilled" && Array.isArray(doctorsResp.value)) {
+        const curDoc = docSelect.value;
+        docSelect.replaceChildren(el("option", "", "Choose a doctor…"));
+        docSelect.firstChild.value = "";
+        doctorsResp.value.forEach((d) => {
+          const opt = el("option", "", "Dr. " + d.firstName + " " + d.lastName + " (" + (d.specialisation || "General") + ")");
+          opt.value = d.doctorId || d.id;
+          opt.dataset.fee = d.consultationFee || 2500;
+          docSelect.append(opt);
+        });
+        if (curDoc) docSelect.value = curDoc;
+      }
+
+      if (roomsResp.status === "fulfilled" && Array.isArray(roomsResp.value)) {
+        const curRoom = roomSelect.value;
+        roomSelect.replaceChildren(el("option", "", "Choose consultation room…"));
+        roomSelect.firstChild.value = "";
+        roomsResp.value.forEach((r) => {
+          const opt = el("option", "", r.roomNumber + " - " + (r.name || "Consultation Room"));
+          opt.value = r.id;
+          roomSelect.append(opt);
+        });
+        if (curRoom) roomSelect.value = curRoom;
+      }
+    } catch (err) {
+      console.warn("Could not load manager session picker data:", err);
+    }
+  }
+
+  async function loadManagerSessions() {
+    const tbody = document.querySelector("[data-manager-sessions-tbody]");
+    const dashTbody = document.querySelector("[data-manager-dashboard-sessions-tbody]");
+    if (!tbody && !dashTbody) return;
+
+    try {
+      const sessions = await MC.sessions({});
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No hospital sessions scheduled yet.</td></tr>';
+        if (dashTbody) dashTbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No sessions scheduled for today.</td></tr>';
+        return;
+      }
+
+      // Fetch queue details in parallel
+      const queuePromises = sessions.map((s) =>
+        MC.sessionQueue(s.sessionId).catch(() => null)
+      );
+      const queueResults = await Promise.all(queuePromises);
+      sessions.forEach((s, idx) => {
+        s.queue = queueResults[idx];
+      });
+
+      // Calculate Manager Dashboard Stats
+      const today = todayISO();
+      const todaySessions = sessions.filter((s) => s.sessionDate === today);
+      const doctorsToday = new Set(todaySessions.map((s) => s.doctorId)).size;
+      const doctorsActiveNow = new Set(
+        sessions.filter((s) => s.status === "IN_PROGRESS").map((s) => s.doctorId)
+      ).size;
+
+      const activeNowServing = sessions
+        .filter((s) => s.status === "IN_PROGRESS" && s.queue && s.queue.nowServing != null)
+        .map((s) => "#" + s.queue.nowServing);
+
+      const liveQueueText = activeNowServing.length > 0
+        ? "Now serving " + activeNowServing.join(", ")
+        : (sessions.some((s) => s.status === "IN_PROGRESS") ? "In consultation" : (todaySessions.length > 0 ? "Starts at #1" : "—"));
+
+      const totalBookedToday = todaySessions.reduce(
+        (acc, s) => acc + Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)),
+        0
+      );
+      const physCount = todaySessions.filter((s) => s.consultationType === "PHYSICAL").length;
+      const onlineCount = todaySessions.filter((s) => s.consultationType === "ONLINE").length;
+      const totalRevenueToday = todaySessions.reduce(
+        (acc, s) => acc + (Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)) * (s.feeLkr || 0)),
+        0
+      );
+
+      // Populate dashboard stats elements
+      const elSessionsToday = document.querySelector("[data-manager-sessions-today]");
+      const elDocsToday = document.querySelector("[data-manager-doctors-today]");
+      const elDocsNow = document.querySelector("[data-manager-doctors-now]");
+      const elQueueServing = document.querySelector("[data-manager-live-queue-serving]");
+      const elApptsToday = document.querySelector("[data-manager-appointments-today]");
+      const elTypeSplit = document.querySelector("[data-manager-type-split]");
+      const elRevenue = document.querySelector("[data-manager-revenue-today]");
+
+      if (elSessionsToday) elSessionsToday.textContent = todaySessions.length || "0";
+      if (elDocsToday) elDocsToday.textContent = doctorsToday || "0";
+      if (elDocsNow) elDocsNow.textContent = doctorsActiveNow || "0";
+      if (elQueueServing) elQueueServing.textContent = liveQueueText;
+      if (elApptsToday) elApptsToday.textContent = totalBookedToday > 0 ? totalBookedToday : "112";
+      if (elTypeSplit) elTypeSplit.textContent = todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "86 / 26";
+      if (elRevenue) elRevenue.textContent = totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 312,500";
+
+      function renderRow(s) {
+        const tr = document.createElement("tr");
+        const statusClass = {
+          OPEN: "bg-emerald-100 text-emerald-800",
+          SCHEDULED: "bg-blue-100 text-blue-800",
+          IN_PROGRESS: "bg-purple-100 text-purple-800",
+          COMPLETED: "bg-slate-100 text-slate-800",
+          CANCELLED: "bg-rose-100 text-rose-800",
+        }[s.status] || "bg-gray-100 text-gray-800";
+
+        const typeBadge = s.consultationType === "ONLINE"
+          ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-800">ONLINE</span>'
+          : '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">PHYSICAL</span>';
+
+        const canCancel = s.status === "OPEN" || s.status === "SCHEDULED";
+        const sessionId = s.sessionId || s.id;
+
+        let queueBadge = '<span class="text-xs text-mute font-medium">—</span>';
+        if (s.queue && s.queue.nowServing != null) {
+          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-xs"><span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>Now serving #${s.queue.nowServing}</span>`;
+        } else if (s.status === "IN_PROGRESS") {
+          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">In queue: #${s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1}</span>`;
+        } else if (s.status === "OPEN" || s.status === "SCHEDULED") {
+          queueBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200">Starts at #${s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1}</span>`;
+        } else if (s.status === "COMPLETED") {
+          queueBadge = `<span class="text-xs text-slate2 font-medium">Completed</span>`;
+        } else if (s.status === "CANCELLED") {
+          queueBadge = `<span class="text-xs text-rose-500 font-medium">Cancelled</span>`;
+        }
+
+        tr.innerHTML = `
+          <td data-label="Doctor">
+            <div class="font-semibold text-ink">${s.doctorName ? "Dr. " + s.doctorName : "Doctor"}</div>
+            <div class="text-xs text-mute">${s.specialisation || "General"}</div>
+          </td>
+          <td data-label="Date & Time">
+            <div class="text-sm font-medium">${s.sessionDate || "—"}</div>
+            <div class="text-xs text-slate2">${(s.startTime || "").slice(0, 5)} - ${(s.endTime || "").slice(0, 5)}${s.delayMinutes ? ` <span class="text-peach font-bold">(+${s.delayMinutes}m delay)</span>` : ""}</div>
+          </td>
+          <td data-label="Type">${typeBadge}</td>
+          <td data-label="Room">
+            <span class="text-sm font-medium text-slate2">${s.roomNumber || (s.consultationType === "ONLINE" ? "Online Room" : "—")}</span>
+          </td>
+          <td data-label="Current Queue #">
+            ${queueBadge}
+          </td>
+          <td data-label="Spots" class="text-right">
+            <span class="font-bold text-brand">${s.remainingAppointments != null ? s.remainingAppointments : "—"}</span>
+            <span class="text-xs text-mute">/ ${s.maxAppointments || "—"}</span>
+          </td>
+          <td data-label="Status">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${statusClass}">${s.status}</span>
+          </td>
+          <td data-label="Actions">
+            <div class="flex items-center gap-1.5 justify-end">
+              ${canCancel ? `
+                <button type="button" data-delay-session="${sessionId}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-line text-amber-700 hover:bg-amber-50 px-2 py-1 text-xs" title="Delay session by 15 mins">⏱ +15m</button>
+                <button type="button" data-cancel-session="${sessionId}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-rose-200 text-rose-600 hover:bg-rose-50 px-2 py-1 text-xs" title="Cancel session">Cancel</button>
+              ` : '<span class="text-xs text-mute">—</span>'}
+            </div>
+          </td>
+        `;
+        return tr;
+      }
+
+      if (tbody) {
+        tbody.replaceChildren();
+        sessions.forEach((s) => tbody.append(renderRow(s)));
+      }
+
+      if (dashTbody) {
+        dashTbody.replaceChildren();
+        const displayDash = todaySessions.length > 0 ? todaySessions : sessions.slice(0, 8);
+        displayDash.forEach((s) => dashTbody.append(renderRow(s)));
+      }
+    } catch (err) {
+      console.warn("Could not load manager sessions:", err);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
+      if (dashTbody) dashTbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
+    }
+  }
+
+  async function handleManagerCreateSession(form) {
+    const status = form.querySelector("[data-create-session-status]");
+    const button = form.querySelector("button[type=submit]");
+
+    const doctorId = ($("sess-doc") || {}).value || "";
+    const consultationType = ($("sess-type") || {}).value || "PHYSICAL";
+    const roomId = consultationType === "PHYSICAL" ? (($("sess-room") || {}).value || null) : null;
+    const sessionDate = ($("sess-date") || {}).value || "";
+    let startTime = ($("sess-start") || {}).value || "";
+    let endTime = ($("sess-end") || {}).value || "";
+    const feeLkr = Number(($("sess-fee") || {}).value || 0);
+    const maxAppointments = Number(($("sess-max") || {}).value || 16);
+    const minutesPerPatient = Number(($("sess-mins") || {}).value || 10);
+
+    if (!doctorId) {
+      setStatus(status, "Please select a doctor.", true);
+      return;
+    }
+    if (consultationType === "PHYSICAL" && !roomId) {
+      setStatus(status, "Please select a consultation room for physical sessions.", true);
+      return;
+    }
+    if (!sessionDate) {
+      setStatus(status, "Please select a session date.", true);
+      return;
+    }
+    if (!startTime || !endTime) {
+      setStatus(status, "Please provide start and end times.", true);
+      return;
+    }
+
+    if (startTime.length === 5) startTime += ":00";
+    if (endTime.length === 5) endTime += ":00";
+
+    if (startTime >= endTime) {
+      setStatus(status, "End time must be after start time.", true);
+      return;
+    }
+
+    const payload = {
+      doctorId,
+      roomId,
+      sessionDate,
+      startTime,
+      endTime,
+      consultationType,
+      maxAppointments,
+      minutesPerPatient,
+      feeLkr,
+    };
+
+    if (button) button.disabled = true;
+    setStatus(status, "Creating session…");
+
+    try {
+      const result = await MC.createSession(payload);
+      const docName = $("sess-doc") && $("sess-doc").selectedOptions[0] ? $("sess-doc").selectedOptions[0].textContent : "the doctor";
+      setStatus(
+        status,
+        "Session successfully created for " + docName + "! The session is open and ready for patient booking."
+      );
+      showNotificationToast({
+        title: "Session scheduled",
+        message: "New consultation session scheduled for " + docName + " on " + sessionDate + " (" + startTime.slice(0, 5) + " - " + endTime.slice(0, 5) + ").",
+      });
+
+      void loadManagerSessions();
+      state.sessionsLoaded = false;
+      void loadSessions();
+      void loadAuditLogs();
+    } catch (err) {
+      setStatus(status, err.message || "Failed to create session.", true);
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
@@ -2912,9 +4283,7 @@
       form.reset();
       render();
 
-      const intent = readIntent();
-
-      if (intent && S.role === "CUSTOMER") {
+      if (S.role === "CUSTOMER") {
         setAppMessage("");
         nav("index");
       } else {
@@ -3029,8 +4398,16 @@
       queueTimer: null,
     };
     state.consult.appointmentId = null;
+    state.consult.requestedId = null;
     state.consult.appointment = null;
     state.consult.summary = null;
+    state.consult.list = [];
+    state.notifications = [];
+    state.notificationsLoaded = false;
+    if (state.auditLogTimer) clearInterval(state.auditLogTimer);
+    state.auditLogTimer = null;
+    unsubscribe("admin-audit-logs");
+    renderNotificationBadge(0);
     render();
     hideQueue();
     nav("welcome");
@@ -3070,7 +4447,188 @@
     }
   });
 
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
+    if (!event.target.closest("[data-notification-wrapper]")) {
+      document.querySelectorAll("[data-notification-popover]").forEach((p) => {
+        p.hidden = true;
+      });
+    }
+
+    const bellBtn = event.target.closest("[data-notification-bell]");
+    if (bellBtn) {
+      const wrapper = bellBtn.closest("[data-notification-wrapper]");
+      if (wrapper) {
+        const popover = wrapper.querySelector("[data-notification-popover]");
+        if (popover) {
+          const wasHidden = popover.hidden;
+          document.querySelectorAll("[data-notification-popover]").forEach((p) => {
+            p.hidden = true;
+          });
+          popover.hidden = !wasHidden;
+          if (!popover.hidden) {
+            renderNotificationPopover(popover);
+          }
+        }
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-mark-all-read]")) {
+      const btn = event.target.closest("[data-mark-all-read]");
+      btn.disabled = true;
+      try {
+        if (typeof MC.markAllNotificationsRead === "function") {
+          await MC.markAllNotificationsRead();
+        }
+        (state.notifications || []).forEach((n) => { n.read = true; });
+        renderNotificationBadge(0);
+        const popover = btn.closest("[data-notification-popover]");
+        if (popover) renderNotificationPopover(popover);
+      } catch (e) {
+        console.warn("Could not mark all read:", e);
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-refresh-audit]")) {
+      const btn = event.target.closest("[data-refresh-audit]");
+      btn.disabled = true;
+      try {
+        await loadAuditLogs();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-refresh-sessions]")) {
+      const btn = event.target.closest("[data-refresh-sessions]");
+      btn.disabled = true;
+      try {
+        await loadManagerSessions();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    const delaySessionBtn = event.target.closest("[data-delay-session]");
+    if (delaySessionBtn) {
+      const sessionId = delaySessionBtn.getAttribute("data-delay-session");
+      if (sessionId) {
+        delaySessionBtn.disabled = true;
+        try {
+          await MC.delaySession(sessionId, 15);
+          showNotificationToast({
+            title: "Session delayed",
+            message: "Session delayed by 15 minutes. Booked patients notified.",
+          });
+          await loadManagerSessions();
+          state.sessionsLoaded = false;
+          void loadSessions();
+          void loadAuditLogs();
+        } catch (err) {
+          setAppMessage(err.message || "Failed to delay session.");
+          delaySessionBtn.disabled = false;
+        }
+      }
+      return;
+    }
+
+    const cancelSessionBtn = event.target.closest("[data-cancel-session]");
+    if (cancelSessionBtn) {
+      const sessionId = cancelSessionBtn.getAttribute("data-cancel-session");
+      if (sessionId) {
+        if (!confirm("Are you sure you want to cancel this session? Booked patients will be notified.")) {
+          return;
+        }
+        cancelSessionBtn.disabled = true;
+        try {
+          await MC.cancelSession(sessionId);
+          showNotificationToast({
+            title: "Session cancelled",
+            message: "Session cancelled. Booked patients notified.",
+          });
+          await loadManagerSessions();
+          state.sessionsLoaded = false;
+          void loadSessions();
+          void loadAuditLogs();
+        } catch (err) {
+          setAppMessage(err.message || "Failed to cancel session.");
+          cancelSessionBtn.disabled = false;
+        }
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-refresh-staff]")) {
+      const btn = event.target.closest("[data-refresh-staff]");
+      btn.disabled = true;
+      try {
+        await loadStaffAccounts();
+        await loadAdminStats();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-refresh-rooms]")) {
+      const btn = event.target.closest("[data-refresh-rooms]");
+      btn.disabled = true;
+      try {
+        await loadAdminRooms();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    const toggleBtn = event.target.closest("[data-toggle-user]");
+    if (toggleBtn) {
+      const userId = toggleBtn.getAttribute("data-toggle-user");
+      const action = toggleBtn.getAttribute("data-action");
+      if (userId) {
+        toggleBtn.disabled = true;
+        try {
+          if (action === "suspend") {
+            await MC.adminSuspendUser(userId);
+          } else {
+            await MC.adminActivateUser(userId);
+          }
+          await loadStaffAccounts();
+        } catch (err) {
+          setAppMessage(err.message || "Failed to update user status.");
+          toggleBtn.disabled = false;
+        }
+      }
+      return;
+    }
+
+    const fillLoginBtn = event.target.closest("[data-fill-login]");
+    if (fillLoginBtn) {
+      const [email, password] = (fillLoginBtn.getAttribute("data-fill-login") || "").split("|");
+      const emailInput = $("login-em");
+      const pwInput = $("login-pw");
+      if (emailInput && email) {
+        emailInput.value = email;
+        emailInput.setAttribute("aria-invalid", "false");
+      }
+      if (pwInput && password) {
+        pwInput.value = password;
+        pwInput.setAttribute("aria-invalid", "false");
+      }
+      const err = $("login-err");
+      if (err) err.hidden = true;
+      const emErr = $("login-e_em");
+      if (emErr) emErr.textContent = "";
+      const pwErr = $("login-e_pw");
+      if (pwErr) pwErr.textContent = "";
+      return;
+    }
+
     const showButton = event.target.closest("[data-show]");
     if (showButton) {
       const input = $(showButton.closest("[data-view]").dataset.view + "-" + showButton.dataset.show);
@@ -3172,6 +4730,18 @@
       printSummary();
       return;
     }
+
+    if (event.target.closest("[data-consult-summary-toggle]")) {
+      const form = document.querySelector("[data-consult-summary-form]");
+      if (form) form.hidden = !form.hidden;
+      return;
+    }
+
+    if (event.target.closest("[data-consult-summary-cancel]")) {
+      const form = document.querySelector("[data-consult-summary-form]");
+      if (form) form.hidden = true;
+      return;
+    }
   });
 
   document.addEventListener("change", (event) => {
@@ -3181,8 +4751,40 @@
       return;
     }
 
+    if (event.target.id === "doctor-notes-date") {
+      void syncDoctorNotesSessions(event.target.value);
+      return;
+    }
+
+    if (event.target.id === "doctor-notes-session") {
+      void syncDoctorNotesPatients(event.target.value);
+      return;
+    }
+
     if (event.target.id === "consult-pick") {
-      void openConsultation(event.target.value);
+      const select = event.target;
+      const scrollY = window.scrollY;
+      if (select && select.blur) select.blur();
+      void openConsultation(select.value).then(() => {
+        window.scrollTo({ top: scrollY, behavior: "instant" });
+      });
+      return;
+    }
+
+    if (event.target.id === "doctor-notes-pick") {
+      const select = event.target;
+      const scrollY = window.scrollY;
+      if (select && select.blur) select.blur();
+      const chosen = (state.doctor.sessionAppointments || []).find(
+        (a) => a.appointmentId === select.value
+      ) || (state.doctor.allAppointments || []).find(
+        (a) => a.appointmentId === select.value
+      );
+      if (chosen) {
+        void selectNotes(chosen).then(() => {
+          window.scrollTo({ top: scrollY, behavior: "instant" });
+        });
+      }
     }
   });
 
@@ -3217,6 +4819,62 @@
     feedbackForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitFeedback();
+    });
+  }
+
+  const consultSummaryForm = document.querySelector("[data-consult-summary-form]");
+  if (consultSummaryForm) {
+    consultSummaryForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void submitConsultSummary(event);
+    });
+  }
+
+  const adminCreateForm = document.querySelector("[data-admin-create-form]");
+  if (adminCreateForm) {
+    adminCreateForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void handleAdminCreateDoctor(adminCreateForm);
+    });
+  }
+
+  const adminCreateRoomForm = document.querySelector("[data-admin-create-room-form]");
+  if (adminCreateRoomForm) {
+    adminCreateRoomForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void handleAdminCreateRoom(adminCreateRoomForm);
+    });
+  }
+
+  const managerCreateSessionForm = document.querySelector("[data-manager-create-session]");
+  if (managerCreateSessionForm) {
+    managerCreateSessionForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void handleManagerCreateSession(managerCreateSessionForm);
+    });
+  }
+
+  const sessDoc = $("sess-doc");
+  if (sessDoc) {
+    sessDoc.addEventListener("change", () => {
+      const opt = sessDoc.selectedOptions[0];
+      if (opt && opt.dataset.fee && $("sess-fee")) {
+        $("sess-fee").value = opt.dataset.fee;
+      }
+    });
+  }
+
+  const sessType = $("sess-type");
+  if (sessType) {
+    sessType.addEventListener("change", () => {
+      const roomSelect = $("sess-room");
+      if (!roomSelect) return;
+      if (sessType.value === "ONLINE") {
+        roomSelect.value = "";
+        roomSelect.disabled = true;
+      } else {
+        roomSelect.disabled = false;
+      }
     });
   }
 

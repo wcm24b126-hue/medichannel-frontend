@@ -143,12 +143,48 @@
     },
 
     // Discovery ------------------------------------------------------
+    doctors(filters) {
+      return request("doctors" + query(filters));
+    },
+
     specialisations() {
       return request("specialisations");
     },
 
     sessions(filters) {
       return request("sessions" + query(filters));
+    },
+
+    createSession(payload) {
+      return request("sessions", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
+    rooms() {
+      return request("rooms");
+    },
+
+    createRoom(payload) {
+      return request("rooms", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
+    cancelSession(sessionId) {
+      return request("sessions/" + encodeURIComponent(sessionId) + "/cancel", {
+        method: "PATCH",
+        body: {},
+      });
+    },
+
+    delaySession(sessionId, minutes) {
+      return request("sessions/" + encodeURIComponent(sessionId) + "/delay", {
+        method: "PATCH",
+        body: { delayMinutes: Number(minutes) || 15 },
+      });
     },
 
     // Notifications --------------------------------------------------
@@ -164,9 +200,53 @@
       return request("notifications/" + encodeURIComponent(id) + "/read", { method: "PATCH" });
     },
 
+    markAllNotificationsRead() {
+      return request("notifications/read-all", { method: "PATCH" });
+    },
+
+    auditLogs() {
+      return request("audit-logs");
+    },
+
     sessionQueue(sessionId) {
       return request(
         "sessions/" + encodeURIComponent(sessionId) + "/queue"
+      );
+    },
+
+    // Admin -----------------------------------------------------------
+    adminCreateDoctor(payload) {
+      return request("doctors", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
+    adminUsers(params) {
+      return request("admin/users" + query(params));
+    },
+
+    adminStats() {
+      return request("admin/stats");
+    },
+
+    adminActivateUser(userId) {
+      return request(
+        "admin/users/" + encodeURIComponent(userId) + "/activate",
+        {
+          method: "PATCH",
+          body: {},
+        }
+      );
+    },
+
+    adminSuspendUser(userId) {
+      return request(
+        "admin/users/" + encodeURIComponent(userId) + "/suspend",
+        {
+          method: "PATCH",
+          body: {},
+        }
       );
     },
 
@@ -246,6 +326,20 @@
       return request("doctor/appointments" + query(filters));
     },
 
+    acceptAppointment(appointmentId) {
+      return request(
+        "doctor/appointments/" + encodeURIComponent(appointmentId) + "/accept",
+        { method: "PATCH", body: {} }
+      );
+    },
+
+    declineAppointment(appointmentId) {
+      return request(
+        "doctor/appointments/" + encodeURIComponent(appointmentId) + "/decline",
+        { method: "PATCH", body: {} }
+      );
+    },
+
     markArrived(appointmentId) {
       return request(
         "doctor/appointments/" + encodeURIComponent(appointmentId) + "/arrive",
@@ -256,6 +350,15 @@
     startConsultation(appointmentId) {
       return request(
         "doctor/appointments/" + encodeURIComponent(appointmentId) + "/start",
+        { method: "PATCH", body: {} }
+      );
+    },
+
+    completeConsultation(appointmentId) {
+      return request(
+        "doctor/appointments/" +
+          encodeURIComponent(appointmentId) +
+          "/complete",
         { method: "PATCH", body: {} }
       );
     },
@@ -284,6 +387,10 @@
           body: summary,
         }
       );
+    },
+
+    request(path, options) {
+      return request(path, options);
     },
   };
 
