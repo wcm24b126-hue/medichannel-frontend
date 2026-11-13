@@ -1955,14 +1955,8 @@
     if (status) setStatus(status, "Loading your sessions…");
 
     try {
-      let sessions = await MC.doctorSessions(todayISO());
-
-      if (!Array.isArray(sessions)) throw new Error("Unexpected response");
-
-      if (!sessions.length && !state.doctor.sessionsLoaded) {
-        const all = await MC.doctorSessions();
-        sessions = Array.isArray(all) ? all : [];
-      }
+      let sessions = await MC.doctorSessions();
+      if (!Array.isArray(sessions)) sessions = [];
 
       state.doctor.sessions = sessions;
       state.doctor.sessionsLoaded = true;
@@ -2843,7 +2837,7 @@
           item &&
           (S.role === "DOCTOR"
             ? ["IN_CONSULTATION", "COMPLETED", "ARRIVED", "BOOKED"].includes(item.status)
-            : ["IN_CONSULTATION", "COMPLETED"].includes(item.status))
+            : (["IN_CONSULTATION", "COMPLETED"].includes(item.status) || item.acceptanceStatus === "ACCEPTED"))
       );
 
       state.consult.list = appointments;
