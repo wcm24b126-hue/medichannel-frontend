@@ -9,7 +9,7 @@
   - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` (Neon connection)
   - `JWT_SECRET`, `ENCRYPTION_KEY`, `HMAC_SECRET` (32+ chars each)
   - `APP_FRONTEND_ORIGIN` (exact Netlify URL, no wildcard)
-  - `APP_DEMO_SEED=true`, `APP_DEMO_PASSWORD=MediDemo#2026!` (to populate Neon)
+  - `APP_DEMO_SEED=false` in production (only enable in isolated staging with `APP_DEMO_PASSWORD=<STRONG_RANDOM_PASSWORD_MIN_12_CHARS>`)
   - `PORT=8080`
 - WebSocket: `/ws` (STOMP), allowed origin from `APP_FRONTEND_ORIGIN`
 - CORS: frontend origin only

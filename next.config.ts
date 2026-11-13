@@ -55,6 +55,11 @@ const nextConfig: NextConfig = {
       });
     }
 
+    const isProd = process.env.NODE_ENV === "production";
+    const devConnectOrigins = isProd
+      ? ""
+      : " ws://localhost:8080 http://localhost:8080";
+
     const replicaCsp = [
       "default-src 'self'",
       `script-src 'self' ${inlineScriptHashes
@@ -63,7 +68,7 @@ const nextConfig: NextConfig = {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob:",
-      "connect-src 'self' https://medichannel-backend.onrender.com wss://medichannel-backend.onrender.com ws://localhost:8080 http://localhost:8080",
+      `connect-src 'self' https://medichannel-backend.onrender.com wss://medichannel-backend.onrender.com${devConnectOrigins}`,
       "media-src 'none'",
       "object-src 'none'",
       "frame-src 'none'",
