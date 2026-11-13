@@ -715,12 +715,17 @@
   function setSession(user) {
     if (!user || !HOME[user.role]) {
       S = null;
+      try { localStorage.removeItem("mc-active-user"); } catch {}
       if (state.notificationTimer) clearInterval(state.notificationTimer);
       state.notificationTimer = null;
       state.notifications = [];
       renderNotificationBadge(0);
       return;
     }
+
+    try {
+      localStorage.setItem("mc-active-user", JSON.stringify({ email: user.email, role: user.role }));
+    } catch {}
 
     state.consult.appointmentId = null;
     state.consult.requestedId = null;
@@ -750,6 +755,19 @@
     setAppMessage("Your session expired. Please sign in again.");
     nav("login");
   }
+
+  window.addEventListener("storage", (event) => {
+    if (event.key === "mc-active-user" && event.newValue) {
+      try {
+        const active = JSON.parse(event.newValue);
+        if (S && active && active.email && active.email.toLowerCase() !== (S.email || "").toLowerCase()) {
+          setAppMessage(
+            `⚠️ Multi-tab session conflict: You signed into "${active.email}" in another tab. Browsers share session cookies across all tabs, so actions in this tab will fail. To use two accounts simultaneously, please open the second user in an Incognito / Private window.`
+          );
+        }
+      } catch {}
+    }
+  });
 
   // ---------------------------------------------------------------
   // Booking intent (login gate with return)

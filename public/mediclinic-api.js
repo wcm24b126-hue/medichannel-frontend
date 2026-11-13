@@ -20,11 +20,16 @@
   }
 
   function friendlyMessage(status, body, fallback) {
+    if (status === 403) {
+      const msg = (body && typeof body.message === "string" && body.message.trim())
+        ? body.message.trim()
+        : "You do not have access to this item.";
+      return msg + " (Note: If you signed into another account in a second tab, your session cookie was replaced. Please open the second user in an Incognito / Private window to test two users simultaneously.)";
+    }
     if (body && typeof body.message === "string" && body.message.trim()) {
       return body.message.trim();
     }
     if (status === 401) return "Please sign in again to continue.";
-    if (status === 403) return "You do not have access to this item.";
     if (status === 404) return "That record could not be found.";
     if (status === 409) return "That action conflicts with the current state.";
     if (status === 422) return "Some of the details provided are not valid.";
