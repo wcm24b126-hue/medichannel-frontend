@@ -155,6 +155,31 @@
       return request("sessions" + query(filters));
     },
 
+    createSession(payload) {
+      return request("sessions", {
+        method: "POST",
+        body: payload,
+      });
+    },
+
+    rooms() {
+      return request("rooms");
+    },
+
+    cancelSession(sessionId) {
+      return request("sessions/" + encodeURIComponent(sessionId) + "/cancel", {
+        method: "PATCH",
+        body: {},
+      });
+    },
+
+    delaySession(sessionId, minutes) {
+      return request("sessions/" + encodeURIComponent(sessionId) + "/delay", {
+        method: "PATCH",
+        body: { delayMinutes: Number(minutes) || 15 },
+      });
+    },
+
     // Notifications --------------------------------------------------
     notifications() {
       return request("notifications");

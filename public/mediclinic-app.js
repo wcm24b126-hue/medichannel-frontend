@@ -38,7 +38,7 @@
   const HOME = {
     CUSTOMER: "index",
     DOCTOR: "doctor",
-    MANAGER: "manager",
+    MANAGER: "manager-s",
     ADMIN: "admin",
   };
 
@@ -425,6 +425,11 @@
     if (link.hash === "#admin-d" || link.hash === "#admin") {
       void loadAdminStats();
     }
+
+    if (link.hash === "#manager-s" || link.hash === "#manager-d" || link.hash === "#manager") {
+      void loadManagerSessionPicker();
+      void loadManagerSessions();
+    }
   }
 
   function initPanels(view, requestedPanel) {
@@ -473,6 +478,11 @@
 
     if (active.id === "admin-d" || active.id === "admin") {
       void loadAdminStats();
+    }
+
+    if (active.id === "manager-s" || active.id === "manager-d") {
+      void loadManagerSessionPicker();
+      void loadManagerSessions();
     }
   }
 
@@ -555,6 +565,8 @@
       void loadAdminStats();
     } else if (id === "manager") {
       void loadStaffAccounts();
+      void loadManagerSessionPicker();
+      void loadManagerSessions();
     }
 
     if (["welcome", "index", "appointments"].includes(id)) {
@@ -3488,6 +3500,195 @@
     }
   }
 
+  async function loadManagerSessionPicker() {
+    const docSelect = $("sess-doc");
+    const roomSelect = $("sess-room");
+    const dateInput = $("sess-date");
+    if (!docSelect || !roomSelect) return;
+
+    if (dateInput) {
+      const today = todayISO();
+      dateInput.min = today;
+      if (!dateInput.value) dateInput.value = today;
+    }
+
+    try {
+      const [doctorsResp, roomsResp] = await Promise.allSettled([
+        MC.doctors(),
+        MC.rooms(),
+      ]);
+
+      if (doctorsResp.status === "fulfilled" && Array.isArray(doctorsResp.value)) {
+        const curDoc = docSelect.value;
+        docSelect.replaceChildren(el("option", "", "Choose a doctor…"));
+        docSelect.firstChild.value = "";
+        doctorsResp.value.forEach((d) => {
+          const opt = el("option", "", "Dr. " + d.firstName + " " + d.lastName + " (" + (d.specialisation || "General") + ")");
+          opt.value = d.doctorId || d.id;
+          opt.dataset.fee = d.consultationFee || 2500;
+          docSelect.append(opt);
+        });
+        if (curDoc) docSelect.value = curDoc;
+      }
+
+      if (roomsResp.status === "fulfilled" && Array.isArray(roomsResp.value)) {
+        const curRoom = roomSelect.value;
+        roomSelect.replaceChildren(el("option", "", "Choose consultation room…"));
+        roomSelect.firstChild.value = "";
+        roomsResp.value.forEach((r) => {
+          const opt = el("option", "", r.roomNumber + " - " + (r.name || "Consultation Room"));
+          opt.value = r.id;
+          roomSelect.append(opt);
+        });
+        if (curRoom) roomSelect.value = curRoom;
+      }
+    } catch (err) {
+      console.warn("Could not load manager session picker data:", err);
+    }
+  }
+
+  async function loadManagerSessions() {
+    const tbody = document.querySelector("[data-manager-sessions-tbody]");
+    if (!tbody) return;
+
+    try {
+      const sessions = await MC.sessions({});
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-mute">No hospital sessions scheduled yet.</td></tr>';
+        return;
+      }
+
+      tbody.replaceChildren();
+      sessions.forEach((s) => {
+        const tr = document.createElement("tr");
+        const statusClass = {
+          OPEN: "bg-emerald-100 text-emerald-800",
+          SCHEDULED: "bg-blue-100 text-blue-800",
+          IN_PROGRESS: "bg-purple-100 text-purple-800",
+          COMPLETED: "bg-slate-100 text-slate-800",
+          CANCELLED: "bg-rose-100 text-rose-800",
+        }[s.status] || "bg-gray-100 text-gray-800";
+
+        const typeBadge = s.consultationType === "ONLINE"
+          ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-800">ONLINE</span>'
+          : '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">PHYSICAL</span>';
+
+        const canCancel = s.status === "OPEN" || s.status === "SCHEDULED";
+        const sessionId = s.sessionId || s.id;
+
+        tr.innerHTML = `
+          <td data-label="Doctor">
+            <div class="font-semibold text-ink">${s.doctorName ? "Dr. " + s.doctorName : "Doctor"}</div>
+            <div class="text-xs text-mute">${s.specialisation || "General"}</div>
+          </td>
+          <td data-label="Date & Time">
+            <div class="text-sm font-medium">${s.sessionDate || "—"}</div>
+            <div class="text-xs text-slate2">${(s.startTime || "").slice(0, 5)} - ${(s.endTime || "").slice(0, 5)}${s.delayMinutes ? ` <span class="text-peach font-bold">(+${s.delayMinutes}m delay)</span>` : ""}</div>
+          </td>
+          <td data-label="Type">${typeBadge}</td>
+          <td data-label="Room">
+            <span class="text-sm font-medium text-slate2">${s.roomNumber || (s.consultationType === "ONLINE" ? "Online Room" : "—")}</span>
+          </td>
+          <td data-label="Spots" class="text-right">
+            <span class="font-bold text-brand">${s.remainingAppointments != null ? s.remainingAppointments : "—"}</span>
+            <span class="text-xs text-mute">/ ${s.maxAppointments || "—"}</span>
+          </td>
+          <td data-label="Status">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${statusClass}">${s.status}</span>
+          </td>
+          <td data-label="Actions">
+            <div class="flex items-center gap-1.5 justify-end">
+              ${canCancel ? `
+                <button type="button" data-delay-session="${sessionId}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-line text-amber-700 hover:bg-amber-50 px-2 py-1 text-xs" title="Delay session by 15 mins">⏱ +15m</button>
+                <button type="button" data-cancel-session="${sessionId}" class="inline-flex items-center gap-1 border rounded-lg font-semibold cursor-pointer bg-white border-rose-200 text-rose-600 hover:bg-rose-50 px-2 py-1 text-xs" title="Cancel session">Cancel</button>
+              ` : '<span class="text-xs text-mute">—</span>'}
+            </div>
+          </td>
+        `;
+        tbody.append(tr);
+      });
+    } catch (err) {
+      console.warn("Could not load manager sessions:", err);
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
+    }
+  }
+
+  async function handleManagerCreateSession(form) {
+    const status = form.querySelector("[data-create-session-status]");
+    const button = form.querySelector("button[type=submit]");
+
+    const doctorId = ($("sess-doc") || {}).value || "";
+    const consultationType = ($("sess-type") || {}).value || "PHYSICAL";
+    const roomId = consultationType === "PHYSICAL" ? (($("sess-room") || {}).value || null) : null;
+    const sessionDate = ($("sess-date") || {}).value || "";
+    let startTime = ($("sess-start") || {}).value || "";
+    let endTime = ($("sess-end") || {}).value || "";
+    const feeLkr = Number(($("sess-fee") || {}).value || 0);
+    const maxAppointments = Number(($("sess-max") || {}).value || 16);
+    const minutesPerPatient = Number(($("sess-mins") || {}).value || 10);
+
+    if (!doctorId) {
+      setStatus(status, "Please select a doctor.", true);
+      return;
+    }
+    if (consultationType === "PHYSICAL" && !roomId) {
+      setStatus(status, "Please select a consultation room for physical sessions.", true);
+      return;
+    }
+    if (!sessionDate) {
+      setStatus(status, "Please select a session date.", true);
+      return;
+    }
+    if (!startTime || !endTime) {
+      setStatus(status, "Please provide start and end times.", true);
+      return;
+    }
+
+    if (startTime.length === 5) startTime += ":00";
+    if (endTime.length === 5) endTime += ":00";
+
+    if (startTime >= endTime) {
+      setStatus(status, "End time must be after start time.", true);
+      return;
+    }
+
+    const payload = {
+      doctorId,
+      roomId,
+      sessionDate,
+      startTime,
+      endTime,
+      consultationType,
+      maxAppointments,
+      minutesPerPatient,
+      feeLkr,
+    };
+
+    if (button) button.disabled = true;
+    setStatus(status, "Creating session…");
+
+    try {
+      const result = await MC.createSession(payload);
+      const docName = $("sess-doc") && $("sess-doc").selectedOptions[0] ? $("sess-doc").selectedOptions[0].textContent : "the doctor";
+      setStatus(
+        status,
+        "Session successfully created for " + docName + "! The session is open and ready for patient booking."
+      );
+      showNotificationToast({
+        title: "Session scheduled",
+        message: "New consultation session scheduled for " + docName + " on " + sessionDate + " (" + startTime.slice(0, 5) + " - " + endTime.slice(0, 5) + ").",
+      });
+
+      void loadManagerSessions();
+      state.sessionsLoaded = false;
+      void loadSessions();
+    } catch (err) {
+      setStatus(status, err.message || "Failed to create session.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   function printSummary() {
     const appointment = state.consult.appointment;
     const summary = state.consult.summary;
@@ -3805,6 +4006,64 @@
   });
 
   document.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-refresh-sessions]")) {
+      const btn = event.target.closest("[data-refresh-sessions]");
+      btn.disabled = true;
+      try {
+        await loadManagerSessions();
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    const delaySessionBtn = event.target.closest("[data-delay-session]");
+    if (delaySessionBtn) {
+      const sessionId = delaySessionBtn.getAttribute("data-delay-session");
+      if (sessionId) {
+        delaySessionBtn.disabled = true;
+        try {
+          await MC.delaySession(sessionId, 15);
+          showNotificationToast({
+            title: "Session delayed",
+            message: "Session delayed by 15 minutes. Booked patients notified.",
+          });
+          await loadManagerSessions();
+          state.sessionsLoaded = false;
+          void loadSessions();
+        } catch (err) {
+          setAppMessage(err.message || "Failed to delay session.");
+          delaySessionBtn.disabled = false;
+        }
+      }
+      return;
+    }
+
+    const cancelSessionBtn = event.target.closest("[data-cancel-session]");
+    if (cancelSessionBtn) {
+      const sessionId = cancelSessionBtn.getAttribute("data-cancel-session");
+      if (sessionId) {
+        if (!confirm("Are you sure you want to cancel this session? Booked patients will be notified.")) {
+          return;
+        }
+        cancelSessionBtn.disabled = true;
+        try {
+          await MC.cancelSession(sessionId);
+          showNotificationToast({
+            title: "Session cancelled",
+            message: "Session cancelled. Booked patients notified.",
+          });
+          await loadManagerSessions();
+          state.sessionsLoaded = false;
+          void loadSessions();
+        } catch (err) {
+          setAppMessage(err.message || "Failed to cancel session.");
+          cancelSessionBtn.disabled = false;
+        }
+      }
+      return;
+    }
+
     if (event.target.closest("[data-refresh-staff]")) {
       const btn = event.target.closest("[data-refresh-staff]");
       btn.disabled = true;
@@ -4054,6 +4313,38 @@
     adminCreateForm.addEventListener("submit", (event) => {
       event.preventDefault();
       void handleAdminCreateDoctor(adminCreateForm);
+    });
+  }
+
+  const managerCreateSessionForm = document.querySelector("[data-manager-create-session]");
+  if (managerCreateSessionForm) {
+    managerCreateSessionForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void handleManagerCreateSession(managerCreateSessionForm);
+    });
+  }
+
+  const sessDoc = $("sess-doc");
+  if (sessDoc) {
+    sessDoc.addEventListener("change", () => {
+      const opt = sessDoc.selectedOptions[0];
+      if (opt && opt.dataset.fee && $("sess-fee")) {
+        $("sess-fee").value = opt.dataset.fee;
+      }
+    });
+  }
+
+  const sessType = $("sess-type");
+  if (sessType) {
+    sessType.addEventListener("change", () => {
+      const roomSelect = $("sess-room");
+      if (!roomSelect) return;
+      if (sessType.value === "ONLINE") {
+        roomSelect.value = "";
+        roomSelect.disabled = true;
+      } else {
+        roomSelect.disabled = false;
+      }
     });
   }
 
