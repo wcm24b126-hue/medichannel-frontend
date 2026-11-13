@@ -313,8 +313,8 @@ Both repositories are committed and pushed to `main`.
 
 **Frontend** (`/home/ashan/projects/medichannel-frontend`): commit `f4c0172`
 (`fix: align password policy, harden CSP, and prepare Netlify deployment`),
-10 files changed. This audit report is committed immediately after it and
-pushed to `https://github.com/wcm24b126-hue/medichannel-frontend`.
+10 files changed. This audit report is commit `9d8d2a8`; both are pushed to
+`https://github.com/wcm24b126-hue/medichannel-frontend`.
 
 ### Deployment readiness verified in-session
 
