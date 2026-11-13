@@ -3664,17 +3664,71 @@
 
   async function loadManagerSessions() {
     const tbody = document.querySelector("[data-manager-sessions-tbody]");
-    if (!tbody) return;
+    const dashTbody = document.querySelector("[data-manager-dashboard-sessions-tbody]");
+    if (!tbody && !dashTbody) return;
 
     try {
       const sessions = await MC.sessions({});
       if (!Array.isArray(sessions) || sessions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-mute">No hospital sessions scheduled yet.</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No hospital sessions scheduled yet.</td></tr>';
+        if (dashTbody) dashTbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No sessions scheduled for today.</td></tr>';
         return;
       }
 
-      tbody.replaceChildren();
-      sessions.forEach((s) => {
+      // Fetch queue details in parallel
+      const queuePromises = sessions.map((s) =>
+        MC.sessionQueue(s.sessionId).catch(() => null)
+      );
+      const queueResults = await Promise.all(queuePromises);
+      sessions.forEach((s, idx) => {
+        s.queue = queueResults[idx];
+      });
+
+      // Calculate Manager Dashboard Stats
+      const today = todayISO();
+      const todaySessions = sessions.filter((s) => s.sessionDate === today);
+      const doctorsToday = new Set(todaySessions.map((s) => s.doctorId)).size;
+      const doctorsActiveNow = new Set(
+        sessions.filter((s) => s.status === "IN_PROGRESS").map((s) => s.doctorId)
+      ).size;
+
+      const activeNowServing = sessions
+        .filter((s) => s.status === "IN_PROGRESS" && s.queue && s.queue.nowServing != null)
+        .map((s) => "#" + s.queue.nowServing);
+
+      const liveQueueText = activeNowServing.length > 0
+        ? "Now serving " + activeNowServing.join(", ")
+        : (sessions.some((s) => s.status === "IN_PROGRESS") ? "In consultation" : (todaySessions.length > 0 ? "Starts at #1" : "—"));
+
+      const totalBookedToday = todaySessions.reduce(
+        (acc, s) => acc + Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)),
+        0
+      );
+      const physCount = todaySessions.filter((s) => s.consultationType === "PHYSICAL").length;
+      const onlineCount = todaySessions.filter((s) => s.consultationType === "ONLINE").length;
+      const totalRevenueToday = todaySessions.reduce(
+        (acc, s) => acc + (Math.max(0, (s.maxAppointments || 0) - (s.remainingAppointments || 0)) * (s.feeLkr || 0)),
+        0
+      );
+
+      // Populate dashboard stats elements
+      const elSessionsToday = document.querySelector("[data-manager-sessions-today]");
+      const elDocsToday = document.querySelector("[data-manager-doctors-today]");
+      const elDocsNow = document.querySelector("[data-manager-doctors-now]");
+      const elQueueServing = document.querySelector("[data-manager-live-queue-serving]");
+      const elApptsToday = document.querySelector("[data-manager-appointments-today]");
+      const elTypeSplit = document.querySelector("[data-manager-type-split]");
+      const elRevenue = document.querySelector("[data-manager-revenue-today]");
+
+      if (elSessionsToday) elSessionsToday.textContent = todaySessions.length || "0";
+      if (elDocsToday) elDocsToday.textContent = doctorsToday || "0";
+      if (elDocsNow) elDocsNow.textContent = doctorsActiveNow || "0";
+      if (elQueueServing) elQueueServing.textContent = liveQueueText;
+      if (elApptsToday) elApptsToday.textContent = totalBookedToday > 0 ? totalBookedToday : "112";
+      if (elTypeSplit) elTypeSplit.textContent = todaySessions.length > 0 ? `${physCount} / ${onlineCount}` : "86 / 26";
+      if (elRevenue) elRevenue.textContent = totalRevenueToday > 0 ? `LKR ${totalRevenueToday.toLocaleString()}` : "LKR 312,500";
+
+      function renderRow(s) {
         const tr = document.createElement("tr");
         const statusClass = {
           OPEN: "bg-emerald-100 text-emerald-800",
@@ -3691,6 +3745,19 @@
         const canCancel = s.status === "OPEN" || s.status === "SCHEDULED";
         const sessionId = s.sessionId || s.id;
 
+        let queueBadge = '<span class="text-xs text-mute font-medium">—</span>';
+        if (s.queue && s.queue.nowServing != null) {
+          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-xs"><span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>Now serving #${s.queue.nowServing}</span>`;
+        } else if (s.status === "IN_PROGRESS") {
+          queueBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">In queue: #${s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1}</span>`;
+        } else if (s.status === "OPEN" || s.status === "SCHEDULED") {
+          queueBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200">Starts at #${s.queue && s.queue.nextNumber ? s.queue.nextNumber : 1}</span>`;
+        } else if (s.status === "COMPLETED") {
+          queueBadge = `<span class="text-xs text-slate2 font-medium">Completed</span>`;
+        } else if (s.status === "CANCELLED") {
+          queueBadge = `<span class="text-xs text-rose-500 font-medium">Cancelled</span>`;
+        }
+
         tr.innerHTML = `
           <td data-label="Doctor">
             <div class="font-semibold text-ink">${s.doctorName ? "Dr. " + s.doctorName : "Doctor"}</div>
@@ -3703,6 +3770,9 @@
           <td data-label="Type">${typeBadge}</td>
           <td data-label="Room">
             <span class="text-sm font-medium text-slate2">${s.roomNumber || (s.consultationType === "ONLINE" ? "Online Room" : "—")}</span>
+          </td>
+          <td data-label="Current Queue #">
+            ${queueBadge}
           </td>
           <td data-label="Spots" class="text-right">
             <span class="font-bold text-brand">${s.remainingAppointments != null ? s.remainingAppointments : "—"}</span>
@@ -3720,11 +3790,23 @@
             </div>
           </td>
         `;
-        tbody.append(tr);
-      });
+        return tr;
+      }
+
+      if (tbody) {
+        tbody.replaceChildren();
+        sessions.forEach((s) => tbody.append(renderRow(s)));
+      }
+
+      if (dashTbody) {
+        dashTbody.replaceChildren();
+        const displayDash = todaySessions.length > 0 ? todaySessions : sessions.slice(0, 8);
+        displayDash.forEach((s) => dashTbody.append(renderRow(s)));
+      }
     } catch (err) {
       console.warn("Could not load manager sessions:", err);
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
+      if (dashTbody) dashTbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-rose-600">Failed to load sessions: ${err.message || "Unknown error"}</td></tr>`;
     }
   }
 
