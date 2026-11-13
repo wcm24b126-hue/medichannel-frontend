@@ -42,6 +42,16 @@
     ADMIN: "admin",
   };
 
+  function escapeHtml(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   const ACL = {
     appointments: ["CUSTOMER"],
     consult: ["CUSTOMER", "DOCTOR"],
@@ -3723,9 +3733,11 @@
 
       rooms.forEach((r) => {
         const tr = el("tr");
-        const typeBadge = r.roomType === "PHYSICAL"
-          ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-sky-50 text-sky-800 border-sky-200">Physical</span>'
-          : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-purple-50 text-purple-800 border-purple-200">Virtual</span>';
+        const typeBadge = (r.roomType === "PROCEDURE")
+          ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-amber-50 text-amber-800 border-amber-200">Procedure</span>'
+          : (r.roomType === "OTHER")
+          ? '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-purple-50 text-purple-800 border-purple-200">Other</span>'
+          : '<span class="inline-block px-2 py-0.5 border rounded-full text-[11px] leading-[14px] font-semibold tracking-wider uppercase whitespace-nowrap bg-sky-50 text-sky-800 border-sky-200">Consultation</span>';
 
         tr.innerHTML =
           '<td data-label="Room No."><b>' + escapeHtml(r.roomNumber) + '</b></td>' +
