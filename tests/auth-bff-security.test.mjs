@@ -99,6 +99,8 @@ test("setSession really writes the tab token and clears it when signed out", () 
     patientPollTimer: null,
     notificationTimer: null,
     notifications: [],
+    notificationsLoaded: false,
+    shownToastIds: new Set(),
     syncedSummaryNotifications: new Set(),
     syncedReviewNotifications: new Set(),
     myReviews: [],

@@ -94,6 +94,27 @@ test("patient profile and own feedback use the backend profile contracts", async
   assert.equal(calls[2].settings.method, "GET");
 });
 
+function functionSource(source, name) {
+  const asyncStart = source.indexOf(`async function ${name}(`);
+  const plainStart = source.indexOf(`function ${name}(`);
+  const start = asyncStart >= 0 ? asyncStart : plainStart;
+  assert.ok(start >= 0, `${name} was not found`);
+
+  let depth = 0;
+  let started = false;
+  for (let i = start; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === "{") {
+      depth += 1;
+      started = true;
+    } else if (char === "}") {
+      depth -= 1;
+      if (started && depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`Unterminated function: ${name}`);
+}
+
 test("a consultation deep link resolves a specific appointment", async () => {
   const { MC, calls } = loadApi();
   const id = "55555555-5555-5555-5555-555555555555";
@@ -103,10 +124,149 @@ test("a consultation deep link resolves a specific appointment", async () => {
   assert.equal(calls[0].settings.method, "GET");
 
   assert.match(APP_SOURCE, /id\.startsWith\("consult-"\)/);
+
+  const actionSrc = functionSource(APP_SOURCE, "notificationAction");
+  const createActionFn = (role) =>
+    new Function("S", `${actionSrc}\nreturn notificationAction;`)({ role });
+
+  const patientAction = createActionFn("CUSTOMER");
+  const doctorAction = createActionFn("DOCTOR");
+
+  assert.equal(patientAction(null), null);
+  assert.equal(patientAction({ type: "CONSULTATION_STARTED" }), null);
+  assert.equal(patientAction({ type: "CALLED", appointmentId: "" }), null);
+  assert.equal(doctorAction({ type: "NEW_CHAT_MESSAGE" }), null);
+
+  const specialId = "apt-1?token=secret&extra=1";
+  const encodedSpecialId = encodeURIComponent(specialId);
+
+  for (const type of ["CONSULTATION_STARTED", "CALLED", "NEW_CHAT_MESSAGE"]) {
+    const action = patientAction({ appointmentId: id, type, title: "Update" });
+    assert.deepEqual(action, {
+      label: "Join consultation →",
+      view: "consult",
+      appointmentId: id,
+      href: "#consult-" + encodeURIComponent(id),
+    });
+    assert.equal(action.href.includes("?"), false);
+
+    const encodedAction = patientAction({
+      appointmentId: specialId,
+      type,
+      title: "Update",
+    });
+    assert.equal(encodedAction.href, "#consult-" + encodedSpecialId);
+    assert.equal(encodedAction.href.includes("?"), false);
+  }
+
+  for (const type of ["CONSULTATION_STARTED", "NEW_CHAT_MESSAGE"]) {
+    const docAction = doctorAction({ appointmentId: id, type, title: "Update" });
+    assert.deepEqual(docAction, {
+      label: "Open consultation →",
+      view: "consult",
+      appointmentId: id,
+      href: "#consult-" + encodeURIComponent(id),
+    });
+    assert.equal(docAction.href.includes("?"), false);
+  }
+
+  const toastSrc = functionSource(APP_SOURCE, "showNotificationToast");
+  const popoverSrc = functionSource(APP_SOURCE, "renderNotificationPopover");
   assert.match(
-    APP_SOURCE,
-    /link\.href = "#consult-" \+ encodeURIComponent\(n\.appointmentId\)/
+    toastSrc,
+    /const action = notificationAction\(n\);[\s\S]*?link\.href = action\.href;/
   );
+  assert.match(
+    popoverSrc,
+    /const action = notificationAction\(n\);[\s\S]*?link\.href = action\.href;/
+  );
+
+  const createdLinks = [];
+  const navCalls = [];
+  const makeEl = (tag) => {
+    const el = {
+      tagName: tag.toUpperCase(),
+      children: [],
+      style: {},
+      className: "",
+      textContent: "",
+      href: "",
+      innerHTML: "",
+      listeners: {},
+      setAttribute() {},
+      append(...nodes) {
+        this.children.push(...nodes);
+      },
+      replaceChildren(...nodes) {
+        this.children = [...nodes];
+      },
+      addEventListener(event, handler) {
+        this.listeners[event] = handler;
+      },
+      remove() {},
+    };
+    if (tag.toLowerCase() === "a") createdLinks.push(el);
+    return el;
+  };
+  const listEl = makeEl("div");
+  const documentMock = {
+    body: makeEl("body"),
+    getElementById: () => null,
+    createElement: makeEl,
+  };
+  const stateMock = {
+    shownToastIds: new Set(),
+    notifications: [
+      {
+        notificationId: "n-1",
+        appointmentId: id,
+        type: "CONSULTATION_STARTED",
+        title: "Consultation started",
+        message: "Ready",
+        read: false,
+      },
+    ],
+    consult: { requestedId: null },
+  };
+  const renderHarness = new Function(
+    "document",
+    "state",
+    "animateEntry",
+    "setTimeout",
+    "clearTimeout",
+    "markNotificationAsRead",
+    "closeNotificationPopovers",
+    "nav",
+    "notificationAction",
+    `${toastSrc}\n${popoverSrc}\nreturn { showNotificationToast, renderNotificationPopover };`
+  )(
+    documentMock,
+    stateMock,
+    () => {},
+    () => 1,
+    () => {},
+    () => {},
+    () => {},
+    (view) => navCalls.push(view),
+    patientAction
+  );
+
+  renderHarness.showNotificationToast(stateMock.notifications[0]);
+  assert.equal(createdLinks.length, 1);
+  assert.equal(createdLinks[0].href, "#consult-" + encodeURIComponent(id));
+  createdLinks[0].onclick({ preventDefault() {} });
+  assert.equal(stateMock.consult.requestedId, id);
+  assert.deepEqual(navCalls, ["consult"]);
+
+  stateMock.consult.requestedId = null;
+  renderHarness.renderNotificationPopover({
+    querySelector: () => listEl,
+  });
+  assert.equal(createdLinks.length, 2);
+  assert.equal(createdLinks[1].href, "#consult-" + encodeURIComponent(id));
+  createdLinks[1].listeners.click({ preventDefault() {} });
+  assert.equal(stateMock.consult.requestedId, id);
+  assert.deepEqual(navCalls, ["consult", "consult"]);
 });
 
 test("the SPA exposes patient profile management", () => {

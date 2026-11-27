@@ -600,6 +600,8 @@
 
   const state = {
     notifications: [],
+    notificationsLoaded: false,
+    shownToastIds: new Set(),
     syncedSummaryNotifications: new Set(),
     syncedReviewNotifications: new Set(),
     notificationTimer: null,
@@ -2239,6 +2241,8 @@
       if (state.notificationTimer) clearInterval(state.notificationTimer);
       state.notificationTimer = null;
       state.notifications = [];
+      state.notificationsLoaded = false;
+      if (state.shownToastIds) state.shownToastIds.clear();
       state.syncedSummaryNotifications.clear();
       state.syncedReviewNotifications.clear();
       state.myReviews = [];
@@ -2271,6 +2275,8 @@
     state.consult.list = [];
     state.syncedSummaryNotifications.clear();
     state.syncedReviewNotifications.clear();
+    state.notificationsLoaded = false;
+    state.shownToastIds.clear();
     state.myReviews = [];
     state.submittedFeedbackIds.clear();
     state.appointments = [];
@@ -2341,6 +2347,8 @@
     state.notificationTimer = null;
     state.syncedSummaryNotifications.clear();
     state.syncedReviewNotifications.clear();
+    state.notificationsLoaded = false;
+    state.shownToastIds.clear();
     state.submittedFeedbackIds.clear();
     state.appointments = [];
     state.appointmentsLoaded = false;
@@ -2665,6 +2673,96 @@
     void loadConsultationReviewState(appointmentId);
   }
 
+  function notificationAction(n) {
+    if (!n || !n.appointmentId) return null;
+    const role = S && S.role ? S.role : "";
+    const type = n.type || "";
+    const title = String(n.title || "").toLowerCase();
+
+    if (role === "DOCTOR") {
+      if (type === "CONSULTATION_STARTED" || type === "NEW_CHAT_MESSAGE") {
+        return {
+          label: "Open consultation →",
+          view: "consult",
+          appointmentId: n.appointmentId,
+          href: "#consult-" + encodeURIComponent(n.appointmentId),
+        };
+      }
+      return {
+        label: "View session queue →",
+        view: "doctor",
+        appointmentId: null,
+        href: "#doctor",
+      };
+    }
+
+    if (type === "CONSULTATION_STARTED" || type === "CALLED" || type === "NEW_CHAT_MESSAGE") {
+      return {
+        label: "Join consultation →",
+        view: "consult",
+        appointmentId: n.appointmentId,
+        href: "#consult-" + encodeURIComponent(n.appointmentId),
+      };
+    }
+
+    if (type === "APPOINTMENT_BOOKED" && title.includes("accepted")) {
+      return {
+        label: "Pay in appointments →",
+        view: "appointments",
+        appointmentId: null,
+        href: "#appointments",
+      };
+    }
+
+    if (type === "APPOINTMENT_ARRIVED") {
+      return {
+        label: "Follow live queue →",
+        view: "appointments",
+        appointmentId: null,
+        href: "#appointments",
+      };
+    }
+
+    if (type === "SUMMARY_AVAILABLE" || type === "CONSULTATION_COMPLETED") {
+      return {
+        label: "View consultation summary →",
+        view: "appointments",
+        appointmentId: null,
+        href: "#appointments",
+      };
+    }
+
+    if (type === "APPOINTMENT_CANCELLED" && title.includes("declined")) {
+      return {
+        label: "Book another session →",
+        view: "index",
+        appointmentId: null,
+        href: "#index",
+      };
+    }
+
+    return {
+      label: "View appointments →",
+      view: "appointments",
+      appointmentId: null,
+      href: "#appointments",
+    };
+  }
+
+  function markNotificationAsRead(notification) {
+    if (!notification || notification.read || !notification.notificationId) return;
+    notification.read = true;
+    const unreadCount = (state.notifications || []).filter((item) => !item.read).length;
+    renderNotificationBadge(unreadCount);
+    void MC.markNotificationRead(notification.notificationId).catch(() => {});
+  }
+
+  function refreshOpenNotificationPopovers() {
+    document.querySelectorAll("[data-notification-popover]").forEach((popover) => {
+      if (!popover.hidden) renderNotificationPopover(popover);
+    });
+  }
+
   function handleIncomingNotification(notification) {
     if (!S || !notification || !notification.notificationId) return;
     const exists = state.notifications.some(
@@ -2675,12 +2773,16 @@
     state.notifications.unshift(notification);
     const unreadCount = state.notifications.filter((item) => !item.read).length;
     renderNotificationBadge(unreadCount);
+    refreshOpenNotificationPopovers();
     showNotificationToast(notification);
 
     if (S.role === "DOCTOR") {
       syncReviewNotification(notification);
       if (state.doctor.sessionId) {
         void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+      }
+      if (typeof loadDoctorAppointments === "function" && activeView === "doctor") {
+        void loadDoctorAppointments({ silent: true });
       }
       void MC.doctorSessions().then((sessions) => {
         if (Array.isArray(sessions)) {
@@ -2706,20 +2808,30 @@
       const unread = items.filter((n) => !n.read);
       const isInitial = !state.notificationsLoaded;
       state.notificationsLoaded = true;
-      const prevCount = (state.notifications || []).filter((n) => !n.read).length;
+      const existingIds = new Set(
+        (state.notifications || []).map((item) => item.notificationId)
+      );
       state.notifications = items;
       unread.forEach((notification) => {
         syncSummaryNotification(notification);
         syncReviewNotification(notification);
       });
-      if (!isInitial && unread.length > prevCount && unread.length > 0) {
-        const latest = unread[0] || unread[unread.length - 1];
-        showNotificationToast(latest);
-        if (S && S.role === "DOCTOR" && state.doctor.sessionId) {
-          void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+      if (!isInitial) {
+        const newlyArrived = unread.find(
+          (n) => n.notificationId && !existingIds.has(n.notificationId)
+        );
+        if (newlyArrived) {
+          showNotificationToast(newlyArrived);
+          if (S && S.role === "DOCTOR" && state.doctor.sessionId) {
+            void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+          } else if (S && S.role === "CUSTOMER") {
+            void loadAppointments();
+            void refreshPatientQueue();
+          }
         }
       }
       renderNotificationBadge(unread.length);
+      refreshOpenNotificationPopovers();
     } catch (e) {
       // silently fail - notifications are non-critical
     }
@@ -2727,6 +2839,10 @@
 
   function showNotificationToast(n) {
     if (!n) return;
+    if (n.notificationId) {
+      if (state.shownToastIds.has(n.notificationId)) return;
+      state.shownToastIds.add(n.notificationId);
+    }
 
     let container = document.getElementById("notification-toast-container");
     if (!container) {
@@ -2788,13 +2904,22 @@
     msg.textContent = n.message || "";
     toast.append(msg);
 
-    if (n.appointmentId) {
+    const action = notificationAction(n);
+    if (action) {
       const link = document.createElement("a");
-      link.href = "#consult-" + encodeURIComponent(n.appointmentId);
+      link.href = action.href;
       link.className =
         "text-xs font-semibold text-brand hover:underline pl-4 mt-0.5 inline-flex items-center gap-1";
-      link.textContent = "Open consultation →";
-      link.onclick = () => dismiss();
+      link.textContent = action.label;
+      link.onclick = (event) => {
+        event.preventDefault();
+        markNotificationAsRead(n);
+        dismiss();
+        if (action.appointmentId) {
+          state.consult.requestedId = action.appointmentId;
+        }
+        nav(action.view);
+      };
       toast.append(link);
     }
 
@@ -2848,15 +2973,20 @@
 
       item.append(header, msg);
 
-      if (n.appointmentId) {
+      const action = notificationAction(n);
+      if (action) {
         const link = document.createElement("a");
-        link.href = "#consult";
+        link.href = action.href;
         link.className = "text-xs font-semibold text-brand hover:underline mt-0.5 inline-block";
-        link.textContent = "Open consultation →";
+        link.textContent = action.label;
         link.addEventListener("click", (event) => {
           event.preventDefault();
-          state.consult.requestedId = n.appointmentId;
-          nav("consult");
+          markNotificationAsRead(n);
+          closeNotificationPopovers();
+          if (action.appointmentId) {
+            state.consult.requestedId = n.appointmentId;
+          }
+          nav(action.view);
         });
         item.append(link);
       }
@@ -10277,6 +10407,8 @@
     state.notifications = [];
     state.syncedSummaryNotifications.clear();
     state.syncedReviewNotifications.clear();
+    state.notificationsLoaded = false;
+    state.shownToastIds.clear();
     state.myReviews = [];
     state.submittedFeedbackIds.clear();
     state.notificationsLoaded = false;
