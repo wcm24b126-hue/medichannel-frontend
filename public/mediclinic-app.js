@@ -8292,43 +8292,141 @@
     return tr;
   }
 
+  const auditLogState = {
+    page: 0,
+    size: 20,
+    totalPages: 1,
+    totalElements: 0,
+    first: true,
+    last: true,
+    loading: false,
+    filterUserId: null,
+    refreshTimer: null,
+    refreshPending: false,
+  };
+
+  function updateAuditPaginationUI() {
+    const pageInfo = document.querySelector("[data-audit-page-info]");
+    const prevBtn = document.querySelector("[data-audit-prev]");
+    const nextBtn = document.querySelector("[data-audit-next]");
+
+    const pageDisplay = auditLogState.totalPages > 0 ? (auditLogState.page + 1) : 1;
+    const totalPagesDisplay = Math.max(1, auditLogState.totalPages);
+
+    if (pageInfo) {
+      pageInfo.textContent = `Page ${pageDisplay} of ${totalPagesDisplay} (${auditLogState.totalElements} total)`;
+    }
+    if (prevBtn) {
+      prevBtn.disabled = Boolean(
+        auditLogState.loading ||
+        auditLogState.first ||
+        auditLogState.page <= 0
+      );
+    }
+    if (nextBtn) {
+      nextBtn.disabled = Boolean(
+        auditLogState.loading ||
+        auditLogState.last ||
+        auditLogState.page >= auditLogState.totalPages - 1
+      );
+    }
+  }
+
+  function scheduleAuditLogReload() {
+    if (!S || S.role !== "ADMIN") return;
+    auditLogState.page = 0;
+    if (auditLogState.loading || activeLoaders.has("loadAuditLogs")) {
+      auditLogState.refreshPending = true;
+      return;
+    }
+    if (auditLogState.refreshTimer) return;
+    auditLogState.refreshTimer = setTimeout(() => {
+      auditLogState.refreshTimer = null;
+      auditLogState.page = 0;
+      loadOnce(loadAuditLogs);
+    }, 150);
+  }
+
   function subscribeAdminAuditLogs() {
     if (!S || S.role !== "ADMIN") return;
     subscribe("admin-audit-logs", "/topic/audit-logs", (log) => {
-      const tbody = document.querySelector("[data-admin-audit-tbody]");
-      if (!tbody) return;
-      const emptyRow = tbody.querySelector("td[colspan]");
-      if (emptyRow) emptyRow.closest("tr").remove();
-
-      const tr = renderAuditLogRow(log);
-      tr.style.backgroundColor = "rgba(254, 243, 199, 0.75)";
-      tr.style.transition = "background-color 2.5s ease";
-      tbody.prepend(tr);
-      setTimeout(() => {
-        tr.style.backgroundColor = "transparent";
-      }, 3000);
+      if (!S || S.role !== "ADMIN") return;
+      if (
+        auditLogState.filterUserId &&
+        log &&
+        log.userId &&
+        log.userId !== auditLogState.filterUserId
+      ) {
+        return;
+      }
+      scheduleAuditLogReload();
     });
   }
 
-  async function loadAuditLogs() {
+  function applyAuditLogsResponse(response) {
+    if (response && Array.isArray(response.content)) {
+      auditLogState.page = typeof response.page === "number" ? response.page : auditLogState.page;
+      auditLogState.size = typeof response.size === "number" ? response.size : auditLogState.size;
+      auditLogState.totalElements = typeof response.totalElements === "number" ? response.totalElements : response.content.length;
+      auditLogState.totalPages = typeof response.totalPages === "number" ? response.totalPages : (response.content.length > 0 ? 1 : 0);
+      auditLogState.first = typeof response.first === "boolean" ? response.first : (auditLogState.page === 0);
+      auditLogState.last = typeof response.last === "boolean" ? response.last : (auditLogState.page >= auditLogState.totalPages - 1);
+      return response.content.slice(0, auditLogState.size);
+    }
+    if (Array.isArray(response)) {
+      auditLogState.totalElements = response.length;
+      auditLogState.totalPages = response.length > 0 ? 1 : 0;
+      auditLogState.first = true;
+      auditLogState.last = true;
+      return response.slice(0, auditLogState.size);
+    }
+    return [];
+  }
+
+  function configureAuditLogRequest(opts) {
+    if (opts && typeof opts.page === "number") auditLogState.page = Math.max(0, opts.page);
+    if (opts && typeof opts.size === "number") auditLogState.size = opts.size;
+    if (opts && "userId" in opts && auditLogState.filterUserId !== opts.userId) {
+      auditLogState.filterUserId = opts.userId;
+      auditLogState.page = 0;
+    }
+    auditLogState.loading = true;
+    updateAuditPaginationUI();
+    const params = { page: auditLogState.page, size: auditLogState.size };
+    if (auditLogState.filterUserId) params.userId = auditLogState.filterUserId;
+    return params;
+  }
+
+  async function loadAuditLogs(opts = {}) {
     const tbody = document.querySelector("[data-admin-audit-tbody]");
     if (!tbody) return;
-
+    const params = configureAuditLogRequest(opts);
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-mute">Loading audit log…</td></tr>';
     try {
-      const logs = await MC.auditLogs();
-      if (!Array.isArray(logs) || !logs.length) {
+      const items = applyAuditLogsResponse(await MC.auditLogs(params));
+      if (!items.length) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-mute">No audit log entries recorded yet.</td></tr>';
-        return;
+      } else {
+        tbody.replaceChildren();
+        items.forEach((l) => tbody.append(renderAuditLogRow(l)));
       }
-
-      tbody.replaceChildren();
-      logs.forEach((log) => tbody.append(renderAuditLogRow(log)));
     } catch (err) {
       console.warn("Could not load audit logs:", err);
-      // Escape the message: even though the API client sanitises server
-      // text, the error row must never interpret a value as markup.
       const message = escapeHtml(err.message || "Unknown error");
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-rose-600">Failed to load audit logs: ${message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-rose-600">Failed to load audit logs: ${message} <button type="button" data-retry-audit class="ml-2 underline font-semibold text-rose-700 hover:text-rose-900 cursor-pointer">Retry</button></td></tr>`;
+    } finally {
+      auditLogState.loading = false;
+      updateAuditPaginationUI();
+      if (auditLogState.refreshPending) {
+        auditLogState.refreshPending = false;
+        if (!auditLogState.refreshTimer) {
+          auditLogState.refreshTimer = setTimeout(() => {
+            auditLogState.refreshTimer = null;
+            auditLogState.page = 0;
+            loadOnce(loadAuditLogs);
+          }, 150);
+        }
+      }
     }
   }
 
@@ -10453,6 +10551,16 @@
     state.myReviews = [];
     state.submittedFeedbackIds.clear();
     state.notificationsLoaded = false;
+    auditLogState.page = 0;
+    auditLogState.totalPages = 1;
+    auditLogState.totalElements = 0;
+    auditLogState.first = true;
+    auditLogState.last = true;
+    auditLogState.loading = false;
+    auditLogState.filterUserId = null;
+    if (auditLogState.refreshTimer) clearTimeout(auditLogState.refreshTimer);
+    auditLogState.refreshTimer = null;
+    auditLogState.refreshPending = false;
     if (state.auditLogTimer) clearInterval(state.auditLogTimer);
     state.auditLogTimer = null;
     unsubscribe("admin-audit-logs");
@@ -10575,6 +10683,27 @@
       } finally {
         btn.disabled = false;
       }
+      return;
+    }
+
+    if (event.target.closest("[data-audit-prev]")) {
+      const btn = event.target.closest("[data-audit-prev]");
+      if (!btn.disabled && auditLogState.page > 0) {
+        void loadAuditLogs({ page: auditLogState.page - 1 });
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-audit-next]")) {
+      const btn = event.target.closest("[data-audit-next]");
+      if (!btn.disabled && !auditLogState.last) {
+        void loadAuditLogs({ page: auditLogState.page + 1 });
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-retry-audit]")) {
+      loadOnce(loadAuditLogs);
       return;
     }
 

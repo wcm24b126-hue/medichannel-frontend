@@ -287,8 +287,8 @@
       return request("notifications/read-all", { method: "PATCH" });
     },
 
-    auditLogs() {
-      return request("audit-logs");
+    auditLogs(params) {
+      return request("audit-logs" + query(params));
     },
 
     // Reports ---------------------------------------------------------
