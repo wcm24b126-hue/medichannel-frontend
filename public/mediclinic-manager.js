@@ -190,13 +190,36 @@
     // this from the Monday–Sunday Asia/Colombo roster, independently of the
     // today-scoped range used for the other cards.
     metrics.sessionsThisWeek = toNumber(report.sessionsThisWeek);
-    metrics.doctorsToday = countDoctors(sessions);
-    metrics.completedToday = sumField(sessions, "completed");
+    metrics.doctorsToday = report.doctorsToday != null
+      ? toNumber(report.doctorsToday)
+      : countDoctors(sessions);
+    metrics.completedToday = report.completedAppointments != null
+      ? toNumber(report.completedAppointments)
+      : sumField(sessions, "completed");
     metrics.cancelledToday = toNumber(report.cancelledAppointments);
     metrics.appointmentsToday = toNumber(report.totalAppointments);
     metrics.physicalAppointments = toNumber(report.physicalAppointments);
     metrics.onlineAppointments = toNumber(report.onlineAppointments);
     metrics.revenueLkr = toNumber(report.revenueLkr);
+
+    // Authoritative backend aggregates
+    metrics.completedAppointments = metrics.completedToday;
+    metrics.bookedAppointments = toNumber(report.bookedAppointments);
+    metrics.checkedInAppointments = toNumber(report.checkedInAppointments);
+    metrics.arrivedAppointments = toNumber(report.arrivedAppointments);
+    metrics.inConsultationAppointments = toNumber(report.inConsultationAppointments);
+    metrics.noShowAppointments = toNumber(report.noShows);
+    metrics.unpaidAppointments = toNumber(report.unpaidAppointments);
+    metrics.unpaidAmountLkr = toNumber(report.unpaidAmountLkr);
+    metrics.roomsToday = toNumber(report.roomsToday);
+    metrics.sessionsToday = toNumber(report.sessionsToday);
+    metrics.activeSessionsToday = toNumber(report.activeSessionsToday);
+    metrics.completedSessionsToday = toNumber(report.completedSessionsToday);
+    metrics.cancelledSessionsToday = toNumber(report.cancelledSessionsToday);
+    metrics.totalCapacity = toNumber(report.totalCapacity);
+    metrics.bookedCapacity = toNumber(report.bookedCapacity);
+    metrics.occupancyRate = toNumber(report.occupancyRate);
+    metrics.noShowRate = toNumber(report.noShowRate);
 
     return metrics;
   }

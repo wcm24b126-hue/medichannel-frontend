@@ -2797,6 +2797,11 @@
       syncSummaryNotification(notification);
       void loadAppointments();
       void refreshPatientQueue();
+    } else if (S.role === "MANAGER") {
+      invalidateManagerDashboard();
+      if (activeView === "manager" || (window.location && window.location.hash.startsWith("#manager"))) {
+        void loadManagerDashboard({ force: true });
+      }
     }
   }
 
@@ -2827,6 +2832,11 @@
           } else if (S && S.role === "CUSTOMER") {
             void loadAppointments();
             void refreshPatientQueue();
+          } else if (S && S.role === "MANAGER") {
+            invalidateManagerDashboard();
+            if (activeView === "manager" || (window.location && window.location.hash.startsWith("#manager"))) {
+              void loadManagerDashboard({ force: true });
+            }
           }
         }
       }
@@ -4814,9 +4824,13 @@
     try {
       await MC.pay(appointmentId, "CARD");
       setAppMessage("");
+      invalidateManagerDashboard();
       await loadAppointments();
       if (state.manager.receptionLoaded) {
         await loadManagerReception({ silent: true });
+      }
+      if (S && S.role === "MANAGER") {
+        void loadManagerDashboard({ force: true });
       }
     } catch (error) {
       setAppMessage(error.message);
@@ -5201,7 +5215,11 @@
   async function checkInAppointment(appointmentId) {
     try {
       await MC.checkIn(appointmentId);
+      invalidateManagerDashboard();
       await loadAppointments();
+      if (S && S.role === "MANAGER") {
+        void loadManagerDashboard({ force: true });
+      }
     } catch (error) {
       setAppMessage(error.message);
     }
@@ -8717,8 +8735,11 @@
 
       if (dashTbody) {
         dashTbody.replaceChildren();
-        const displayDash = todaySessions.length > 0 ? todaySessions : sessions.slice(0, 8);
-        displayDash.forEach((s) => dashTbody.append(renderRow(s)));
+        if (todaySessions.length > 0) {
+          todaySessions.forEach((s) => dashTbody.append(renderRow(s)));
+        } else {
+          dashTbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-mute">No sessions scheduled for today.</td></tr>';
+        }
       }
     } catch (err) {
       console.warn("Could not load manager sessions:", err);
@@ -8803,13 +8824,27 @@
           typeSplit: "—",
           revenue: "—",
         });
-        setStatus(
-          status,
-          "Could not load dashboard figures: " +
+        if (status) {
+          status.hidden = false;
+          status.classList.remove("text-slate2");
+          status.classList.add("text-bad");
+          status.replaceChildren();
+          const msg = document.createElement("span");
+          msg.textContent =
+            "Could not load dashboard figures: " +
             (error.message || "Unknown error") +
-            " The dashboard values are unavailable.",
-          true
-        );
+            " The dashboard values are unavailable. ";
+          const retryBtn = document.createElement("button");
+          retryBtn.type = "button";
+          retryBtn.className =
+            "inline-flex items-center ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-white border border-bad text-bad hover:bg-rose-50 cursor-pointer";
+          retryBtn.setAttribute("data-retry-manager-dashboard", "true");
+          retryBtn.textContent = "Retry";
+          retryBtn.addEventListener("click", () => {
+            void loadManagerDashboard({ force: true });
+          });
+          status.append(msg, retryBtn);
+        }
         return false;
       } finally {
         dashboardRequest = null;
@@ -9749,10 +9784,12 @@
         "success"
       );
 
+      invalidateManagerDashboard();
       await Promise.allSettled([
         loadManagerReception({ silent: true }),
         loadManagerSessions(),
         loadSessions(),
+        loadManagerDashboard({ force: true }),
       ]);
     } catch (error) {
       console.warn("Could not book walk-in appointment:", error);
@@ -9927,7 +9964,11 @@
 
     try {
       await MC.markAppointmentArrived(appointmentId);
+      invalidateManagerDashboard();
       await loadManagerReception({ silent: true });
+      if (S && S.role === "MANAGER") {
+        void loadManagerDashboard({ force: true });
+      }
     } catch (error) {
       setAppMessage(error.message);
       if (button) {
@@ -10518,6 +10559,11 @@
       } finally {
         btn.disabled = false;
       }
+      return;
+    }
+
+    if (event.target.closest("[data-retry-manager-dashboard]")) {
+      void loadManagerDashboard({ force: true });
       return;
     }
 
