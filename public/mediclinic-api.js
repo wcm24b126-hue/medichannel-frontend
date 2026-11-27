@@ -484,6 +484,14 @@
       return request("appointments/me");
     },
 
+    myActiveAppointments() {
+      return request("appointments/me/active");
+    },
+
+    myAppointmentHistory(params) {
+      return request("appointments/me/history" + query(params));
+    },
+
     myAppointment(appointmentId) {
       return request("appointments/" + encodeURIComponent(appointmentId));
     },

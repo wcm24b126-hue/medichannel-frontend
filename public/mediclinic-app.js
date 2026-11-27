@@ -627,8 +627,34 @@
     selectedSession: null,
     bookingDate: "",
     booking: null,
+    activeAppointments: [],
+    appointmentHistory: [],
+    appointmentHistoryPage: {
+      page: 0,
+      size: 20,
+      totalElements: 0,
+      totalPages: 1,
+      first: true,
+      last: true,
+    },
+    appointmentsReload: {
+      timer: null,
+      inFlight: false,
+      pending: false,
+      refreshActive: false,
+      refreshHistory: false,
+      page: null,
+    },
     appointments: [],
     appointmentsLoaded: false,
+    appointmentsPage: {
+      page: 0,
+      size: 20,
+      totalElements: 0,
+      totalPages: 1,
+      first: true,
+      last: true,
+    },
     profile: null,
     myReviews: [],
     submittedFeedbackIds: new Set(),
@@ -2795,7 +2821,15 @@
       });
     } else if (S.role === "CUSTOMER") {
       syncSummaryNotification(notification);
-      void loadAppointments();
+      const affectsHistory = notificationAffectsHistory(notification);
+      if (typeof scheduleAppointmentsReload === "function") {
+        scheduleAppointmentsReload({
+          refreshActive: true,
+          refreshHistory: affectsHistory,
+        });
+      } else {
+        void loadAppointments();
+      }
       void refreshPatientQueue();
     } else if (S.role === "MANAGER") {
       invalidateManagerDashboard();
@@ -2830,7 +2864,11 @@
           if (S && S.role === "DOCTOR" && state.doctor.sessionId) {
             void loadDoctorQueue(state.doctor.sessionId, { silent: true });
           } else if (S && S.role === "CUSTOMER") {
-            void loadAppointments();
+            const affectsHistory = notificationAffectsHistory(newlyArrived);
+            scheduleAppointmentsReload({
+              refreshActive: true,
+              refreshHistory: affectsHistory,
+            });
             void refreshPatientQueue();
           } else if (S && S.role === "MANAGER") {
             invalidateManagerDashboard();
@@ -4099,7 +4137,10 @@
     }
 
     // BR-04: One active appointment per patient per session
-    const existingActive = (state.appointments || []).find(
+    const activePool = state.activeAppointments && state.activeAppointments.length
+      ? state.activeAppointments
+      : state.appointments || [];
+    const existingActive = activePool.find(
       (a) => a.sessionId === session.sessionId && ["BOOKED", "CHECKED_IN", "ARRIVED", "IN_CONSULTATION"].includes(a.status)
     );
     if (existingActive) {
@@ -4348,15 +4389,149 @@
     }
   }
 
-  async function loadAppointments() {
+  function defaultAppointmentsPage() {
+    return {
+      page: 0,
+      size: 20,
+      totalElements: 0,
+      totalPages: 1,
+      first: true,
+      last: true,
+    };
+  }
+
+  function normalizeAppointmentsResponse(response) {
+    if (Array.isArray(response)) {
+      return {
+        content: response,
+        page: 0,
+        size: response.length || 20,
+        totalElements: response.length,
+        totalPages: 1,
+        first: true,
+        last: true,
+      };
+    }
+    if (response && Array.isArray(response.content)) {
+      return {
+        content: response.content,
+        page: Number.isFinite(Number(response.page)) ? Number(response.page) : 0,
+        size: Number.isFinite(Number(response.size)) ? Number(response.size) : 20,
+        totalElements: Number.isFinite(Number(response.totalElements))
+          ? Number(response.totalElements)
+          : response.content.length,
+        totalPages: Number.isFinite(Number(response.totalPages))
+          ? Math.max(1, Number(response.totalPages))
+          : 1,
+        first: Boolean(response.first),
+        last: Boolean(response.last),
+      };
+    }
+    return null;
+  }
+
+  function notificationAffectsHistory(notification) {
+    if (!notification) return true;
+    const text = [
+      notification.type,
+      notification.title,
+      notification.message,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toUpperCase();
+    return (
+      text.includes("COMPLETED") ||
+      text.includes("CANCEL") ||
+      text.includes("NO_SHOW") ||
+      text.includes("NO SHOW") ||
+      text.includes("SUMMARY") ||
+      text.includes("REVIEW") ||
+      text.includes("FEEDBACK")
+    );
+  }
+
+  function scheduleAppointmentsReload(options = {}) {
+    const reloadState = state.appointmentsReload;
+    reloadState.refreshActive =
+      reloadState.refreshActive || options.refreshActive !== false;
+    reloadState.refreshHistory =
+      reloadState.refreshHistory || options.refreshHistory !== false;
+    if (Number.isInteger(options.page) && options.page >= 0) {
+      reloadState.page = options.page;
+    }
+
+    if (reloadState.timer) {
+      clearTimeout(reloadState.timer);
+    }
+
+    reloadState.timer = setTimeout(() => {
+      reloadState.timer = null;
+      const nextOptions = {
+        refreshActive: reloadState.refreshActive,
+        refreshHistory: reloadState.refreshHistory,
+      };
+      if (Number.isInteger(reloadState.page) && reloadState.page >= 0) {
+        nextOptions.page = reloadState.page;
+      }
+      reloadState.refreshActive = false;
+      reloadState.refreshHistory = false;
+      reloadState.page = null;
+      void loadAppointments(nextOptions);
+    }, 150);
+  }
+
+  function renderAppointmentsPagination() {
+    const wrap = document.querySelector("[data-appointments-pagination]");
+    const info = document.querySelector("[data-appointments-page-info]");
+    const prev = document.querySelector("[data-appointments-prev]");
+    const next = document.querySelector("[data-appointments-next]");
+    if (!wrap) return;
+
+    const meta = state.appointmentHistoryPage || defaultAppointmentsPage();
+    const totalPages = Math.max(1, Number(meta.totalPages) || 1);
+    const page = Math.max(0, Number(meta.page) || 0);
+    const totalElements = Math.max(0, Number(meta.totalElements) || 0);
+
+    wrap.hidden = totalElements === 0;
+    if (info) {
+      info.textContent =
+        "History page " + (page + 1) + " of " + totalPages + " (" + totalElements + " total)";
+    }
+    if (prev) prev.disabled = Boolean(meta.first) || page <= 0;
+    if (next) next.disabled = Boolean(meta.last) || page + 1 >= totalPages;
+  }
+
+  async function loadAppointments(options = {}) {
     if (!S || S.role !== "CUSTOMER") {
       hideQueue();
       return;
     }
 
+    const reloadState = state.appointmentsReload;
+    const refreshActive = options.refreshActive !== false;
+    const refreshHistory = options.refreshHistory !== false;
+    const requestedPage =
+      options && Number.isInteger(options.page) && options.page >= 0
+        ? options.page
+        : (state.appointmentHistoryPage && state.appointmentHistoryPage.page) || 0;
+
+    if (reloadState.inFlight) {
+      reloadState.pending = true;
+      reloadState.refreshActive = reloadState.refreshActive || refreshActive;
+      reloadState.refreshHistory = reloadState.refreshHistory || refreshHistory;
+      if (Number.isInteger(options.page) && options.page >= 0) {
+        reloadState.page = options.page;
+      }
+      return;
+    }
+
+    reloadState.inFlight = true;
     const status = document.querySelector("[data-appointments-status]");
     const tbody = document.querySelector("[data-appointments-list]");
     const empty = document.querySelector("[data-appointments-empty]");
+    const requestedSize =
+      (state.appointmentHistoryPage && state.appointmentHistoryPage.size) || 20;
 
     if (status) {
       status.hidden = false;
@@ -4365,14 +4540,61 @@
     }
 
     try {
-      const list = await MC.myAppointments();
-      if (!Array.isArray(list)) throw new Error("Unexpected response");
+      const [activeResult, historyResult] = await Promise.all([
+        refreshActive ? MC.myActiveAppointments() : Promise.resolve(null),
+        refreshHistory
+          ? MC.myAppointmentHistory({ page: requestedPage, size: requestedSize })
+          : Promise.resolve(null),
+      ]);
 
-      state.appointments = list;
+      if (refreshActive) {
+        if (!Array.isArray(activeResult)) throw new Error("Unexpected response");
+        state.activeAppointments = activeResult;
+      }
+
+      if (refreshHistory) {
+        let page = requestedPage;
+        let normalized = normalizeAppointmentsResponse(historyResult);
+        if (!normalized) throw new Error("Unexpected response");
+
+        if (
+          normalized.content.length === 0 &&
+          page > 0 &&
+          normalized.totalElements > 0
+        ) {
+          page = Math.max(0, normalized.totalPages - 1);
+          normalized = normalizeAppointmentsResponse(
+            await MC.myAppointmentHistory({ page, size: requestedSize })
+          );
+          if (!normalized) throw new Error("Unexpected response");
+        }
+
+        state.appointmentHistory = normalized.content;
+        state.appointmentHistoryPage = {
+          page: normalized.page,
+          size: normalized.size,
+          totalElements: normalized.totalElements,
+          totalPages: normalized.totalPages,
+          first: normalized.first,
+          last: normalized.last,
+        };
+        state.appointmentsPage = state.appointmentHistoryPage;
+      }
+
+      const combined = [
+        ...(Array.isArray(state.activeAppointments) ? state.activeAppointments : []),
+        ...(Array.isArray(state.appointmentHistory) ? state.appointmentHistory : []),
+      ];
+      state.appointments = combined;
       state.appointmentsLoaded = true;
-      renderAppointments(list);
+      renderAppointments(combined);
+      renderAppointmentsPagination();
 
-      const acceptedAppt = list.find((a) => a.acceptanceStatus === "ACCEPTED" && ["BOOKED", "CHECKED_IN", "ARRIVED", "IN_CONSULTATION"].includes(a.status));
+      const acceptedAppt = (state.activeAppointments || []).find(
+        (a) =>
+          a.acceptanceStatus === "ACCEPTED" &&
+          ["BOOKED", "CHECKED_IN", "ARRIVED", "IN_CONSULTATION"].includes(a.status)
+      );
       let banner = document.querySelector("[data-accepted-banner]");
       if (acceptedAppt) {
         if (!banner) {
@@ -4392,10 +4614,10 @@
         status.classList.add("hidden");
       }
       if (empty) {
-        empty.hidden = list.length > 0;
-        empty.classList.toggle("hidden", list.length > 0);
+        empty.hidden = combined.length > 0;
+        empty.classList.toggle("hidden", combined.length > 0);
       }
-      await refreshPatientQueue(list);
+      await refreshPatientQueue(state.activeAppointments);
     } catch (error) {
       if (error.status === 401) {
         handleSessionExpired();
@@ -4410,7 +4632,26 @@
       }
       if (tbody) tbody.replaceChildren();
       if (empty) empty.hidden = true;
+      state.appointmentHistoryPage = defaultAppointmentsPage();
+      state.appointmentsPage = state.appointmentHistoryPage;
+      renderAppointmentsPagination();
       hideQueue();
+    } finally {
+      reloadState.inFlight = false;
+      if (reloadState.pending) {
+        const nextOptions = {
+          refreshActive: reloadState.refreshActive,
+          refreshHistory: reloadState.refreshHistory,
+        };
+        if (Number.isInteger(reloadState.page) && reloadState.page >= 0) {
+          nextOptions.page = reloadState.page;
+        }
+        reloadState.pending = false;
+        reloadState.refreshActive = false;
+        reloadState.refreshHistory = false;
+        reloadState.page = null;
+        void loadAppointments(nextOptions);
+      }
     }
   }
 
@@ -4668,10 +4909,13 @@
 
     if (!list) {
       try {
-        list = state.appointments.length
-          ? state.appointments
-          : await MC.myAppointments();
-        state.appointments = list;
+        if (state.activeAppointments && state.activeAppointments.length) {
+          list = state.activeAppointments;
+        } else {
+          const activeList = await MC.myActiveAppointments();
+          list = Array.isArray(activeList) ? activeList : [];
+          state.activeAppointments = list;
+        }
       } catch (error) {
         if (error.status === 401) handleSessionExpired();
         hideQueue();
@@ -4765,7 +5009,7 @@
           const details = card.querySelector("[data-queue-details]");
           if (!details) return;
           if (payload.nowServing) {
-            const current = activeAppointment(state.appointments);
+            const current = activeAppointment(state.activeAppointments);
             const number = current ? current.appointmentNumber : null;
             const base = details.textContent.split(" · Now serving")[0];
             const nextDetails =
@@ -4942,13 +5186,23 @@
     }
   }
 
-  function confirmAppointmentCancel(appointmentId, options = {}) {
+  async function confirmAppointmentCancel(appointmentId, options = {}) {
     const notice = $("app-session-warning");
-    if (!notice) return Promise.resolve(null);
+    if (!notice) return null;
 
-    const appointment = (Array.isArray(state.appointments) ? state.appointments : [])
+    let appointment = (Array.isArray(state.activeAppointments) ? state.activeAppointments : [])
+      .concat(Array.isArray(state.appointmentHistory) ? state.appointmentHistory : [])
+      .concat(Array.isArray(state.appointments) ? state.appointments : [])
       .concat(Array.isArray(state.manager && state.manager.reception) ? state.manager.reception : [])
       .find((item) => item && String(item.appointmentId) === String(appointmentId));
+
+    if (!appointment && appointmentId && S && S.role === "CUSTOMER") {
+      try {
+        appointment = await MC.myAppointment(appointmentId);
+      } catch {
+        appointment = null;
+      }
+    }
     const previousRole = notice.getAttribute("role");
 
     return new Promise((resolve) => {
@@ -6514,10 +6768,27 @@
     const layout = document.querySelector("[data-consult-layout]");
 
     try {
-      const list =
-        S.role === "DOCTOR"
-          ? await MC.doctorAppointments({})
-          : await MC.myAppointments();
+      let list = [];
+      if (S.role === "DOCTOR") {
+        const rawList = await MC.doctorAppointments({});
+        list = Array.isArray(rawList) ? rawList : [];
+      } else {
+        const [activeRows, historyPayload] = await Promise.all([
+          MC.myActiveAppointments(),
+          MC.myAppointmentHistory({ page: 0, size: 20 }),
+        ]);
+        const activeList = Array.isArray(activeRows) ? activeRows : [];
+        const historyNorm = normalizeAppointmentsResponse(historyPayload);
+        const historyList = historyNorm ? historyNorm.content : [];
+        const seen = new Set();
+        list = activeList.concat(historyList).filter((item) => {
+          if (!item || !item.appointmentId) return false;
+          const id = String(item.appointmentId);
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+      }
 
       // Never open an old completed room by default. Active rooms come first,
       // then rooms the doctor can open now, with closed transcripts last.
@@ -10978,6 +11249,31 @@
 
     if (event.target.closest("[data-appointments-refresh]")) {
       void loadAppointments();
+      return;
+    }
+
+    if (event.target.closest("[data-appointments-prev]")) {
+      const currentPage =
+        (state.appointmentHistoryPage && state.appointmentHistoryPage.page) || 0;
+      if (currentPage > 0) {
+        void loadAppointments({
+          refreshActive: false,
+          refreshHistory: true,
+          page: currentPage - 1,
+        });
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-appointments-next]")) {
+      const meta = state.appointmentHistoryPage || defaultAppointmentsPage();
+      if (!meta.last && meta.page + 1 < meta.totalPages) {
+        void loadAppointments({
+          refreshActive: false,
+          refreshHistory: true,
+          page: meta.page + 1,
+        });
+      }
       return;
     }
 

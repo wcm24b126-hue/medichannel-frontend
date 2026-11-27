@@ -34,6 +34,16 @@ type Appointment = {
   roomNumber: string | null;
 };
 
+type PagedResponse<T> = {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+};
+
 function canCancel(appointment: Appointment) {
   if (!appointment.sessionDate) return false;
   const start = new Date(
@@ -60,7 +70,11 @@ function isClinicBreakNow() {
 }
 
 export default function AppointmentsPage() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [activeAppointments, setActiveAppointments] = useState<Appointment[]>([]);
+  const [historyAppointments, setHistoryAppointments] = useState<Appointment[]>([]);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [historyTotalElements, setHistoryTotalElements] = useState(0);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [period, setPeriod] = useState("");
@@ -72,36 +86,59 @@ export default function AppointmentsPage() {
   const [message, setMessage] = useState("");
 
   const fetchAppData = useCallback(
-    (signal?: AbortSignal) =>
+    (signal?: AbortSignal, targetPage = page) =>
       Promise.all([
-        apiRequest<Appointment[]>("appointments/me", { signal }),
+        apiRequest<Appointment[]>("appointments/me/active", { signal }),
+        apiRequest<PagedResponse<Appointment>>(
+          `appointments/me/history?page=${targetPage}&size=20`,
+          { signal }
+        ),
         apiRequest<Session[]>("sessions", { signal }),
       ]),
+    [page]
+  );
+
+  const applyAppointmentsPayload = useCallback(
+    (activeRows: Appointment[], historyPayload: PagedResponse<Appointment>) => {
+      setActiveAppointments(Array.isArray(activeRows) ? activeRows : []);
+      setHistoryAppointments(
+        Array.isArray(historyPayload?.content) ? historyPayload.content : []
+      );
+      setPage(Number.isFinite(historyPayload?.page) ? historyPayload.page : 0);
+      setTotalPages(Math.max(1, Number(historyPayload?.totalPages) || 1));
+      setHistoryTotalElements(Number(historyPayload?.totalElements) || 0);
+    },
     []
   );
 
-  const loadData = useCallback(async () => {
-    setError("");
-    try {
-      const [appointmentRows, sessionRows] = await fetchAppData();
-      setAppointments(appointmentRows);
-      setSessions(sessionRows);
-      setToday(new Date().toISOString().slice(0, 10));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load appointments.");
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchAppData]);
+  const loadData = useCallback(
+    async (targetPage = page) => {
+      setError("");
+      try {
+        const [activeRows, historyPayload, sessionRows] = await fetchAppData(
+          undefined,
+          targetPage
+        );
+        applyAppointmentsPayload(activeRows, historyPayload);
+        setSessions(sessionRows);
+        setToday(new Date().toISOString().slice(0, 10));
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Unable to load appointments.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyAppointmentsPayload, fetchAppData, page]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
 
     fetchAppData(controller.signal)
-      .then(([appointmentRows, sessionRows]) => {
+      .then(([activeRows, historyPayload, sessionRows]) => {
         if (!active) return;
-        setAppointments(appointmentRows);
+        applyAppointmentsPayload(activeRows, historyPayload);
         setSessions(sessionRows);
         setToday(new Date().toISOString().slice(0, 10));
       })
@@ -117,7 +154,7 @@ export default function AppointmentsPage() {
       active = false;
       controller.abort();
     };
-  }, [fetchAppData]);
+  }, [applyAppointmentsPayload, fetchAppData]);
 
   const availableSessions = useMemo(() => {
     if (!today) return [];
@@ -129,10 +166,7 @@ export default function AppointmentsPage() {
     );
   }, [sessions, today]);
 
-  const completedCount = appointments.filter(
-    (appointment) => appointment.status === "COMPLETED"
-  ).length;
-  const pendingPaymentCount = appointments.filter(
+  const activePendingPaymentCount = activeAppointments.filter(
     (appointment) => appointment.paymentStatus === "PENDING"
   ).length;
 
@@ -215,9 +249,9 @@ export default function AppointmentsPage() {
       description="Book and manage your hospital appointments."
     >
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="card"><p className="text-sm text-slate-500">Appointments</p><p className="mt-2 text-2xl font-bold">{appointments.length}</p></div>
-        <div className="card"><p className="text-sm text-slate-500">Completed</p><p className="mt-2 text-2xl font-bold">{completedCount}</p></div>
-        <div className="card"><p className="text-sm text-slate-500">Pending payments</p><p className="mt-2 text-2xl font-bold">{pendingPaymentCount}</p></div>
+        <div className="card"><p className="text-sm text-slate-500">Active appointments</p><p className="mt-2 text-2xl font-bold">{activeAppointments.length}</p></div>
+        <div className="card"><p className="text-sm text-slate-500">Closed history</p><p className="mt-2 text-2xl font-bold">{historyTotalElements}</p></div>
+        <div className="card"><p className="text-sm text-slate-500">Active pending payments</p><p className="mt-2 text-2xl font-bold">{activePendingPaymentCount}</p></div>
       </div>
 
       <section className="card mt-6">
@@ -281,13 +315,13 @@ export default function AppointmentsPage() {
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-3 text-lg font-bold">Appointment History</h2>
+        <h2 className="mb-3 text-lg font-bold">Active &amp; Upcoming Appointments</h2>
         {loading && <p role="status" className="muted">Loading appointments...</p>}
-        {!loading && !error && appointments.length === 0 && (
-          <p className="card text-slate-500">No appointments were returned for your account.</p>
+        {!loading && !error && activeAppointments.length === 0 && (
+          <p className="card text-slate-500">You have no active or upcoming appointments.</p>
         )}
         <div className="grid gap-4">
-          {appointments.map((appointment) => (
+          {activeAppointments.map((appointment) => (
             <article className="card" key={appointment.appointmentId}>
               <div className="flex flex-wrap justify-between gap-3">
                 <div>
@@ -342,6 +376,70 @@ export default function AppointmentsPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="mb-3 text-lg font-bold">Closed Appointment History</h2>
+        {!loading && !error && historyAppointments.length === 0 && (
+          <p className="card text-slate-500">No closed appointment history was returned for your account.</p>
+        )}
+        <div className="grid gap-4">
+          {historyAppointments.map((appointment) => (
+            <article className="card" key={appointment.appointmentId}>
+              <div className="flex flex-wrap justify-between gap-3">
+                <div>
+                  <h3 className="font-bold">{appointment.doctorName}</h3>
+                  <p className="text-sm text-blue-700">{appointment.specialisation}</p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {appointment.sessionDate} at {appointment.sessionStartTime}
+                    {appointment.roomNumber ? ` · Room ${appointment.roomNumber}` : " · Online"}
+                  </p>
+                </div>
+                <div className="text-sm">
+                  <p>Ref: {appointment.bookingReference}</p>
+                  <p>Appointment no. {appointment.appointmentNumber}</p>
+                  <p>Status: {appointment.status}</p>
+                  <p>Payment: {appointment.paymentStatus}</p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {appointment.status === "COMPLETED" && (
+                  <a
+                    className="text-sm font-semibold text-blue-700 underline"
+                    href={`/mediclinic-system.html#consult-${appointment.appointmentId}`}
+                  >
+                    Open consultation
+                  </a>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+        {!loading && historyTotalElements > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 text-xs">
+            <span className="text-slate-500">
+              History page {page + 1} of {totalPages} ({historyTotalElements} total)
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={page <= 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={page + 1 >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
         <p className="mt-4 text-sm text-slate-500">
           Follow your live queue number, now-serving update and notifications in the{" "}
           <a className="font-semibold text-blue-700 underline" href="/mediclinic-system.html#appointments">
