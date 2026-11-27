@@ -1389,12 +1389,44 @@
     });
   }
 
-  function setWakeMessage(message) {
+  let currentWakeState = { message: "", isError: false };
+
+  function setWakeMessage(message, subtext, isError) {
     const status = $("backend-wake-status");
     if (!status) return;
+
+    if (!message) {
+      if (currentWakeState.message) {
+        status.hidden = true;
+        currentWakeState = { message: "", isError: false };
+      }
+      return;
+    }
+
+    const err = Boolean(isError);
+    if (currentWakeState.message === message && currentWakeState.isError === err) {
+      return;
+    }
+    currentWakeState = { message, isError: err };
+
     const label = status.querySelector("[data-wake-message]");
     if (label) label.textContent = message || "";
-    status.hidden = !message;
+
+    const sub = status.querySelector("[data-wake-subtext]");
+    if (sub) {
+      sub.textContent = subtext || "";
+      sub.hidden = !subtext;
+    }
+
+    const retryBtn = status.querySelector("[data-wake-retry]");
+    if (retryBtn) {
+      retryBtn.hidden = !err;
+      if (err) {
+        retryBtn.disabled = false;
+      }
+    }
+
+    status.hidden = false;
   }
 
   function wakeBackend() {
@@ -1402,11 +1434,14 @@
 
     wakePromise = (async () => {
       const delays = [3000, 6000, 10000, 15000, 20000];
+      const primaryMessage = "Backend is starting. Please wait a moment.";
+      const secondaryMessage =
+        "The free server may take a short time to wake up.";
 
       for (let attempt = 0; attempt <= delays.length; attempt++) {
         const slow = setTimeout(
-          () => setWakeMessage("Connecting to the hospital service…"),
-          2200
+          () => setWakeMessage(primaryMessage, secondaryMessage, false),
+          attempt === 0 ? 1500 : 0
         );
 
         try {
@@ -1416,6 +1451,7 @@
           });
 
           if (response.ok) {
+            clearTimeout(slow);
             setWakeMessage("");
             return true;
           }
@@ -1425,11 +1461,7 @@
           clearTimeout(slow);
         }
 
-        setWakeMessage(
-          attempt < 2
-            ? "The hospital service is starting…"
-            : "The hospital service is still starting. Thanks for waiting…"
-        );
+        setWakeMessage(primaryMessage, secondaryMessage, false);
 
         if (attempt < delays.length) {
           await new Promise((resolve) =>
@@ -1438,7 +1470,11 @@
         }
       }
 
-      setWakeMessage("The backend is still starting. Retry in a moment.");
+      setWakeMessage(
+        "Backend wake-up failed. Please click Retry to try again.",
+        "",
+        true
+      );
       return false;
     })().finally(() => {
       wakePromise = null;
@@ -1923,6 +1959,12 @@
       }
 
       activeView = targetId;
+      document.body.dataset.activeView = targetId;
+
+      const bootOverlay = document.querySelector(".app-boot-screen");
+      if (bootOverlay && (targetId === "login" || targetId === "register")) {
+        bootOverlay.setAttribute("aria-hidden", "true");
+      }
 
       setPrimaryNavCurrent(targetId);
       initPanels(view, panel);
@@ -9986,10 +10028,20 @@
     if (!allOk(form)) return;
 
     const button = form.querySelector('button[type="submit"]');
-    if (button) button.disabled = true;
+    const originalText = button ? button.textContent : "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Logging in…";
+    }
 
     try {
-      const response = await fetchWithTimeout("/api/auth/login", {
+      if (wakePromise) {
+        if (button) button.textContent = "Starting backend…";
+        await wakePromise;
+        if (button) button.textContent = "Logging in…";
+      }
+
+      let response = await fetchWithTimeout("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -9998,6 +10050,23 @@
           password: form.password.value,
         }),
       });
+
+      if (isServiceUnavailable(response)) {
+        if (button) button.textContent = "Starting backend…";
+        const awake = await wakeBackend();
+        if (awake) {
+          if (button) button.textContent = "Logging in…";
+          response = await fetchWithTimeout("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              email: form.email.value.trim(),
+              password: form.password.value,
+            }),
+          });
+        }
+      }
 
       const result = await response.json().catch(() => ({}));
 
@@ -10033,7 +10102,10 @@
     } catch {
       showErr("login-err", "Unable to reach the login service. Please try again.");
     } finally {
-      if (button) button.disabled = false;
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
   }
 
@@ -10058,10 +10130,20 @@
     }
 
     const button = form.querySelector('button[type="submit"]');
-    if (button) button.disabled = true;
+    const originalText = button ? button.textContent : "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Creating account…";
+    }
 
     try {
-      const response = await fetchWithTimeout("/api/auth/register", {
+      if (wakePromise) {
+        if (button) button.textContent = "Starting backend…";
+        await wakePromise;
+        if (button) button.textContent = "Creating account…";
+      }
+
+      let response = await fetchWithTimeout("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -10078,6 +10160,31 @@
           address: values.address,
         }),
       });
+
+      if (isServiceUnavailable(response)) {
+        if (button) button.textContent = "Starting backend…";
+        const awake = await wakeBackend();
+        if (awake) {
+          if (button) button.textContent = "Creating account…";
+          response = await fetchWithTimeout("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              firstName,
+              lastName,
+              email: values.email,
+              password: values.password,
+              confirmPassword: values.confirm,
+              nic: values.nic,
+              dateOfBirth: values.dob,
+              gender: values.gen,
+              phone: values.ph,
+              address: values.address,
+            }),
+          });
+        }
+      }
 
       const result = await response.json().catch(() => ({}));
 
@@ -10113,7 +10220,10 @@
     } catch {
       showErr("register-err", "Unable to reach the registration service.");
     } finally {
-      if (button) button.disabled = false;
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
   }
 
@@ -11189,6 +11299,10 @@
     }
 
     document.body.dataset.appReady = "true";
+    const bootOverlay = document.querySelector(".app-boot-screen");
+    if (bootOverlay) {
+      bootOverlay.setAttribute("aria-hidden", "true");
+    }
 
     if (unavailable && !S) {
       setAppMessage(
@@ -11262,6 +11376,10 @@
 
     bootTimer = null;
     document.body.dataset.appReady = "true";
+    const bootOverlay = document.querySelector(".app-boot-screen");
+    if (bootOverlay) {
+      bootOverlay.setAttribute("aria-hidden", "true");
+    }
     setAppMessage(
       "The session check is taking longer than expected. Please sign in again if needed."
     );
