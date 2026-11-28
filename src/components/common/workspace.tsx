@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { verifyWorkspaceSession } from "@/lib/workspace-session";
 
 type Item = {
   label: string;
@@ -55,46 +56,25 @@ export default function Workspace({
 
   useEffect(() => {
     let active = true;
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) {
-          if (response.status === 401) {
-            if (active) router.replace("/login");
-            return;
-          }
-          throw new Error(data.message || "Unable to verify your session.");
-        }
+    const storage =
+      typeof sessionStorage !== "undefined" ? sessionStorage : null;
 
-        const roleMap = {
-          CUSTOMER: "patient",
-          DOCTOR: "doctor",
-          MANAGER: "manager",
-          ADMIN: "admin",
-        } as const;
-        const resolvedRole = roleMap[data.user?.role as keyof typeof roleMap];
-        if (!resolvedRole) {
-          throw new Error("The session has an unsupported role.");
+    verifyWorkspaceSession({ expectedRole: role, storage }).then((outcome) => {
+      if (!active) return;
+      if (outcome.status === "redirect") {
+        if (outcome.destination === "/login") {
+          if (active) router.replace("/login");
+        } else {
+          router.replace(outcome.destination);
         }
-        if (resolvedRole !== role) {
-          const destinations = {
-            patient: "/appointments",
-            doctor: "/doctor/dashboard",
-            manager: "/manager/dashboard",
-            admin: "/admin/dashboard",
-          };
-          if (active) router.replace(destinations[resolvedRole]);
-          return;
-        }
-        if (active) setSessionRole(resolvedRole);
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setSessionError(
-            error instanceof Error ? error.message : "Unable to verify your session."
-          );
-        }
-      });
+        return;
+      }
+      if (outcome.status === "error") {
+        setSessionError(outcome.message);
+        return;
+      }
+      setSessionRole(outcome.role);
+    });
 
     return () => {
       active = false;
