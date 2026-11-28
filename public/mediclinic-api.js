@@ -228,6 +228,14 @@
       return request("sessions" + query(filters));
     },
 
+    searchSessions(filters) {
+      return request("sessions/search" + query(filters));
+    },
+
+    session(sessionId) {
+      return request("sessions/" + encodeURIComponent(sessionId));
+    },
+
     createSession(payload) {
       return request("sessions", {
         method: "POST",

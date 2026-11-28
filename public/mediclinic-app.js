@@ -625,6 +625,8 @@
       },
     },
     selectedSession: null,
+    selectedSessionId: null,
+    bookingSubmitting: false,
     bookingDate: "",
     booking: null,
     activeAppointments: [],
@@ -2527,14 +2529,24 @@
     }
   }
 
-  function applyIntent() {
+  async function applyIntent() {
     const intent = readIntent();
     if (!intent || !S || S.role !== "CUSTOMER") return;
 
-    const session =
+    let session =
       (intent.sessionId &&
         state.sessions.find((item) => item.sessionId === intent.sessionId)) ||
-      intent.session;
+      null;
+
+    if (!session && intent.sessionId && typeof MC.session === "function") {
+      try {
+        session = await MC.session(intent.sessionId);
+      } catch {
+        session = intent.session || null;
+      }
+    } else if (!session) {
+      session = intent.session || null;
+    }
 
     if (session) {
       selectSession(session, {
@@ -2626,24 +2638,150 @@
     );
   }
 
-  async function loadSessions() {
-    if (state.sessionsLoading) return;
+  const sessionSearchState = {
+    page: 0,
+    size: 12,
+    totalPages: 1,
+    totalElements: 0,
+    loading: false,
+    requestToken: 0,
+    fallbackMode: false,
+    debounceTimer: null,
+  };
 
+  function ensureSessionsPagination() {
+    const list = document.querySelector("[data-session-list]");
+    if (!list || !list.parentNode) return null;
+    let nav = document.querySelector("[data-session-pagination]");
+    if (!nav) {
+      nav = el(
+        "nav",
+        "flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 mt-1"
+      );
+      nav.dataset.sessionPagination = "";
+      nav.setAttribute("aria-label", "Session pages");
+      nav.hidden = true;
+
+      const count = el("p", "text-xs text-mute");
+      count.dataset.sessionCount = "";
+
+      const controls = el("div", "flex items-center gap-2");
+
+      const prev = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed min-h-9 px-3 py-1.5 text-xs",
+        "Previous"
+      );
+      prev.type = "button";
+      prev.dataset.sessionPrev = "";
+      prev.disabled = true;
+      prev.addEventListener("click", () => {
+        if (sessionSearchState.page > 0 && !sessionSearchState.loading) {
+          void loadSessions({ page: sessionSearchState.page - 1 });
+        }
+      });
+
+      const indicator = el(
+        "span",
+        "px-1 text-xs font-semibold text-slate2",
+        "Page 1 of 1"
+      );
+      indicator.dataset.sessionPageIndicator = "";
+
+      const next = el(
+        "button",
+        "inline-flex items-center gap-1.5 border rounded-lg font-semibold cursor-pointer bg-white border-line text-slate2 hover:bg-snow disabled:bg-line disabled:border-line disabled:text-mute disabled:cursor-not-allowed min-h-9 px-3 py-1.5 text-xs",
+        "Next"
+      );
+      next.type = "button";
+      next.dataset.sessionNext = "";
+      next.disabled = true;
+      next.addEventListener("click", () => {
+        if (
+          sessionSearchState.page < sessionSearchState.totalPages - 1 &&
+          !sessionSearchState.loading
+        ) {
+          void loadSessions({ page: sessionSearchState.page + 1 });
+        }
+      });
+
+      controls.append(prev, indicator, next);
+      nav.append(count, controls);
+      list.parentNode.insertBefore(nav, list.nextSibling);
+    }
+    return nav;
+  }
+
+  function updateSessionsPagination() {
+    const nav = ensureSessionsPagination();
+    if (!nav) return;
+
+    const totalElements = sessionSearchState.totalElements;
+    const totalPages = Math.max(1, sessionSearchState.totalPages);
+    const page = sessionSearchState.page;
+    const size = sessionSearchState.size || 12;
+
+    if (totalElements === 0) {
+      nav.hidden = true;
+      return;
+    }
+
+    nav.hidden = false;
+    const prev = nav.querySelector("[data-session-prev]");
+    const next = nav.querySelector("[data-session-next]");
+    const indicator = nav.querySelector("[data-session-page-indicator]");
+    const count = nav.querySelector("[data-session-count]");
+
+    if (prev) prev.disabled = page <= 0 || sessionSearchState.loading;
+    if (next) next.disabled = page >= totalPages - 1 || sessionSearchState.loading;
+    if (indicator) indicator.textContent = "Page " + (page + 1) + " of " + totalPages;
+    if (count) {
+      const start = page * size + 1;
+      const end = Math.min((page + 1) * size, totalElements);
+      count.textContent = "Showing " + start + "–" + end + " of " + totalElements + " sessions";
+    }
+  }
+
+  async function loadSessions(options) {
+    const settings = options || {};
+    if (typeof settings.page === "number" && settings.page >= 0) {
+      sessionSearchState.page = settings.page;
+    }
+    if (settings.resetFallback) {
+      sessionSearchState.fallbackMode = false;
+    }
+
+    const requestToken = ++sessionSearchState.requestToken;
     const status = document.querySelector("[data-session-status]");
     const list = document.querySelector("[data-session-list]");
     const heading = document.querySelector("[data-session-heading]");
     const filters = currentFilters();
     const rangeSelect = $("index-range");
     const range = sessionSearchRange(filters.date, rangeSelect ? rangeSelect.value : "1");
-    const requestFilters = {
-      ...filters,
-      date: "",
-      from: range.from,
-      to: range.to,
-    };
-    state.sessionWeeks = sessionWeekChunks(range.from, range.weeks);
+    const requestFilters = sessionSearchState.fallbackMode
+      ? {
+          ...filters,
+          date: "",
+          from: "",
+          to: "",
+          page: sessionSearchState.page,
+          size: sessionSearchState.size,
+        }
+      : {
+          ...filters,
+          date: "",
+          from: range.from,
+          to: range.to,
+          page: sessionSearchState.page,
+          size: sessionSearchState.size,
+        };
+    state.sessionWeeks = sessionSearchState.fallbackMode
+      ? []
+      : sessionWeekChunks(range.from, range.weeks);
 
     state.sessionsLoading = true;
+    sessionSearchState.loading = true;
+    updateSessionsPagination();
 
     if (status) {
       status.hidden = false;
@@ -2654,30 +2792,93 @@
     if (list) list.replaceChildren();
 
     try {
-      const sessionResponse = await MC.sessions(requestFilters);
-      if (!Array.isArray(sessionResponse)) throw new Error("Unexpected response");
-      let sessions = bookableSessions(sessionResponse);
+      let response = await (typeof MC.searchSessions === "function"
+        ? MC.searchSessions(requestFilters)
+        : MC.sessions(requestFilters));
+      if (requestToken !== sessionSearchState.requestToken) return;
 
+      const normalizeSessionPage = (payload) => {
+        if (payload && Array.isArray(payload.content)) {
+          const totalElements =
+            typeof payload.totalElements === "number"
+              ? payload.totalElements
+              : payload.content.length;
+          const size = typeof payload.size === "number" && payload.size > 0 ? payload.size : sessionSearchState.size;
+          const totalPages =
+            typeof payload.totalPages === "number"
+              ? Math.max(1, payload.totalPages)
+              : Math.max(1, Math.ceil(totalElements / size));
+          return {
+            content: payload.content,
+            page: typeof payload.page === "number" ? payload.page : sessionSearchState.page,
+            size,
+            totalElements,
+            totalPages,
+          };
+        }
+        if (Array.isArray(payload)) {
+          return {
+            content: payload,
+            page: 0,
+            size: sessionSearchState.size,
+            totalElements: payload.length,
+            totalPages: Math.max(1, Math.ceil(payload.length / sessionSearchState.size)),
+          };
+        }
+        throw new Error("Unexpected response");
+      };
+
+      let normalized = normalizeSessionPage(response);
       let fallbackNotice = "";
-      // Keep the no-dead-end fallback: with no sessions in the chosen window,
-      // show the next available sessions and label them as outside the range.
-      if (sessions.length === 0) {
+
+      if (
+        normalized.totalElements === 0 &&
+        sessionSearchState.page === 0 &&
+        !sessionSearchState.fallbackMode
+      ) {
         try {
-          const allUpcoming = bookableSessions(
-            await MC.sessions({ ...filters, date: "", from: "", to: "" })
-          );
-          if (allUpcoming.length > 0) {
-            // The full roster spans six months; keep the no-dead-end fallback
-            // bounded so a past or empty week never renders thousands of cards.
-            sessions = allUpcoming.slice(0, 120);
+          const fallbackResponse = await MC.searchSessions({
+            ...filters,
+            date: "",
+            from: "",
+            to: "",
+            page: 0,
+            size: sessionSearchState.size,
+          });
+          if (requestToken !== sessionSearchState.requestToken) return;
+          const fallbackNormalized = normalizeSessionPage(fallbackResponse);
+          if (fallbackNormalized.totalElements > 0) {
+            normalized = fallbackNormalized;
+            sessionSearchState.fallbackMode = true;
             state.sessionWeeks = [];
             fallbackNotice = `No sessions for ${formatDate(range.from)} – ${formatDate(range.to)}. Showing the next available sessions:`;
           }
         } catch {
-          // keep original empty sessions
+          // keep original empty result
         }
+      } else if (sessionSearchState.fallbackMode) {
+        fallbackNotice = `No sessions for ${formatDate(range.from)} – ${formatDate(range.to)}. Showing the next available sessions:`;
       }
 
+      if (
+        normalized.content.length === 0 &&
+        sessionSearchState.page > 0 &&
+        normalized.totalElements > 0
+      ) {
+        const clampedPage = Math.max(0, normalized.totalPages - 1);
+        sessionSearchState.page = clampedPage;
+        sessionSearchState.loading = false;
+        state.sessionsLoading = false;
+        await loadSessions({ page: clampedPage });
+        return;
+      }
+
+      sessionSearchState.page = normalized.page;
+      sessionSearchState.size = normalized.size;
+      sessionSearchState.totalElements = normalized.totalElements;
+      sessionSearchState.totalPages = normalized.totalPages;
+
+      const sessions = bookableSessions(normalized.content);
       state.sessions = sessions;
       state.sessionsLoaded = true;
 
@@ -2687,9 +2888,10 @@
         } else {
           const rangeLabel =
             formatDate(range.from) + " – " + formatDate(range.to);
+          const total = sessionSearchState.totalElements;
           heading.textContent =
-            sessions.length +
-            (sessions.length === 1 ? " session across " : " sessions across ") +
+            total +
+            (total === 1 ? " session across " : " sessions across ") +
             range.weeks +
             (range.weeks === 1 ? " week · " : " weeks · ") +
             rangeLabel +
@@ -2707,19 +2909,40 @@
       }
 
       renderSessions();
+      updateSessionsPagination();
       if (activeView === "index") startSessionQueuePolling();
     } catch (error) {
+      if (requestToken !== sessionSearchState.requestToken) return;
       state.sessionsLoaded = false;
       state.sessionWeeks = [];
+      state.sessions = [];
+      sessionSearchState.totalElements = 0;
+      sessionSearchState.totalPages = 1;
+      updateSessionsPagination();
       if (heading) heading.textContent = "Sessions unavailable";
       if (status) {
         status.hidden = false;
         status.classList.add("text-bad");
-        status.textContent = error.message;
+        status.textContent = (error && error.message ? error.message : "Could not load sessions.") + " ";
+        const retryBtn = el(
+          "button",
+          "ml-2 inline-flex items-center gap-1 text-xs font-semibold underline text-brand hover:text-brand-d cursor-pointer",
+          "Retry"
+        );
+        retryBtn.type = "button";
+        retryBtn.dataset.sessionRetry = "";
+        retryBtn.addEventListener("click", () => {
+          void loadSessions({ page: sessionSearchState.page });
+        });
+        status.append(retryBtn);
       }
       if (list) list.replaceChildren();
     } finally {
-      state.sessionsLoading = false;
+      if (requestToken === sessionSearchState.requestToken) {
+        state.sessionsLoading = false;
+        sessionSearchState.loading = false;
+        updateSessionsPagination();
+      }
     }
   }
 
@@ -3179,7 +3402,7 @@
             chunk.label +
               " · " +
               sessions.length +
-              (sessions.length === 1 ? " session" : " sessions")
+              (sessions.length === 1 ? " session on this page" : " sessions on this page")
           )
         );
       }
@@ -3991,6 +4214,7 @@
   function clearBookingPanel() {
     state.booking = null;
     state.selectedSession = null;
+    state.selectedSessionId = null;
     state.bookingDate = "";
 
     const title = document.querySelector("[data-booking-title]");
@@ -4056,6 +4280,7 @@
 
     const settings = options || {};
     state.selectedSession = session;
+    state.selectedSessionId = session.sessionId || null;
     state.bookingDate = settings.date || session.sessionDate || "";
     state.booking = null;
 
@@ -4124,31 +4349,45 @@
   function applyBookingDate(date) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
 
-    clearBookingPanel();
+    // Update the booking date without clearing the selected session.
+    // The selected session is independent of search results; only an
+    // explicit cancel, a successful booking, or logout may clear it.
     state.bookingDate = date;
-
-    const form = document.querySelector("[data-booking-form]");
-    if (form) form.hidden = false;
 
     const bookingDateInput = $("booking-date");
     if (bookingDateInput) bookingDateInput.value = date;
 
-    const confirm = document.querySelector("[data-booking-confirm]");
-    if (confirm) confirm.disabled = true;
-
-    const title = document.querySelector("[data-booking-title]");
-    if (title) title.textContent = "Book a session";
-
-    const meta = document.querySelector("[data-booking-meta]");
-    if (meta) meta.textContent = formatDate(date);
-
-    const note = document.querySelector("[data-booking-note]");
-    if (note) {
-      note.textContent = "Choose a session on " + formatDate(date) + ".";
-    }
-
     const searchDate = $("index-dt");
     if (searchDate) searchDate.value = date;
+
+    // If no session is currently selected, reset the booking panel UI
+    // to its neutral state so the user is prompted to pick one.
+    if (!state.selectedSession) {
+      state.booking = null;
+
+      const form = document.querySelector("[data-booking-form]");
+      if (form) form.hidden = false;
+
+      const confirm = document.querySelector("[data-booking-confirm]");
+      if (confirm) confirm.disabled = true;
+
+      const title = document.querySelector("[data-booking-title]");
+      if (title) title.textContent = "Book a session";
+
+      const meta = document.querySelector("[data-booking-meta]");
+      if (meta) meta.textContent = formatDate(date);
+
+      const note = document.querySelector("[data-booking-note]");
+      if (note) {
+        note.textContent = "Choose a session on " + formatDate(date) + ".";
+      }
+
+      const errorEl = document.querySelector("[data-booking-error]");
+      if (errorEl) {
+        errorEl.hidden = true;
+        errorEl.textContent = "";
+      }
+    }
 
     state.sessionsLoaded = false;
     void loadSessions();
@@ -4156,13 +4395,14 @@
 
   async function confirmBooking() {
     const session = state.selectedSession;
+    const selectedSessionId = state.selectedSessionId || (session && session.sessionId);
     const error = document.querySelector("[data-booking-error]");
     const reasonInput = $("index-rs");
     const bookingDateInput = $("booking-date");
     const periodInput = $("index-bp");
     const button = document.querySelector("[data-booking-confirm]");
 
-    if (!session) return;
+    if (!session || !selectedSessionId || state.bookingSubmitting) return;
 
     const reason = reasonInput ? reasonInput.value.trim() : "";
     const bookingDate = bookingDateInput ? bookingDateInput.value : "";
@@ -4275,29 +4515,120 @@
       return;
     }
 
+    state.bookingSubmitting = true;
     if (button) button.disabled = true;
 
+    let keepBookingDisabled = false;
     try {
-      const appointment = await MC.bookAppointment(
-        session.sessionId,
-        reason,
-        period
-      );
+      // Exact-session revalidation MUST succeed before booking proceeds.
+      let freshSession = null;
+      try {
+        if (typeof MC.session !== "function") {
+          throw new Error("Session revalidation is unavailable.");
+        }
+        freshSession = await MC.session(selectedSessionId);
+        if (!freshSession || typeof freshSession !== "object") {
+          throw new Error("Empty session revalidation response.");
+        }
+      } catch (revalidateError) {
+        // Every revalidation failure blocks booking. The selected session is
+        // preserved so the user is never silently switched to another session.
+        const is404 = revalidateError && revalidateError.status === 404;
+        if (is404) {
+          session.status = "UNAVAILABLE";
+          if (error) {
+            error.hidden = false;
+            error.textContent =
+              "This session no longer exists. Please choose another session.";
+          }
+          keepBookingDisabled = true;
+          void loadSessions({ page: sessionSearchState.page });
+          return;
+        }
+        // Transient errors (HTTP 500, timeout, offline/network) — do NOT proceed
+        // to MC.bookAppointment. Keep the form open, re-enable button, allow retry.
+        if (error) {
+          error.hidden = false;
+          error.textContent =
+            "We could not confirm this session\u2019s latest availability. Please retry.";
+        }
+        return;
+      }
 
-      state.booking = appointment;
-      showBookingSuccess(appointment, session);
-      clearIntent();
-      await Promise.allSettled([
-        loadAppointments(),
-        loadSessions(),
-      ]);
-    } catch (problem) {
-      if (error) {
-        error.hidden = false;
-        error.textContent = problem.message;
+      // Update capacity/status on the stored selected session without replacing it
+      if (freshSession.remainingAppointments != null) {
+        session.remainingAppointments = freshSession.remainingAppointments;
+      }
+      if (freshSession.status) {
+        session.status = freshSession.status;
+      }
+
+      const freshRemaining = Number(
+        freshSession.remainingAppointments ??
+          freshSession.availableAppointments ??
+          freshSession.remainingCapacity ??
+          0
+      );
+      const freshAvailable = freshSession.status === "OPEN";
+
+      if (!freshAvailable) {
+        if (error) {
+          error.hidden = false;
+          error.textContent =
+            "This session is no longer available (status: " +
+            (freshSession.status || "unknown") +
+            "). Please choose another session.";
+        }
+        keepBookingDisabled = true;
+        void loadSessions({ page: sessionSearchState.page });
+        return;
+      }
+
+      if (freshRemaining <= 0) {
+        if (error) {
+          error.hidden = false;
+          error.textContent =
+            "This session is now fully booked. No spots remain. Please choose another session.";
+        }
+        keepBookingDisabled = true;
+        void loadSessions({ page: sessionSearchState.page });
+        return;
+      }
+
+      if (bookingClosed(freshSession)) {
+        if (error) {
+          error.hidden = false;
+          error.textContent =
+            "Booking has now closed for this session. Please choose another session.";
+        }
+        keepBookingDisabled = true;
+        void loadSessions({ page: sessionSearchState.page });
+        return;
+      }
+
+      try {
+        const appointment = await MC.bookAppointment(
+          selectedSessionId,
+          reason,
+          period
+        );
+
+        state.booking = appointment;
+        showBookingSuccess(appointment, session);
+        clearIntent();
+        await Promise.allSettled([
+          loadAppointments(),
+          loadSessions({ page: sessionSearchState.page }),
+        ]);
+      } catch (problem) {
+        if (error) {
+          error.hidden = false;
+          error.textContent = problem.message;
+        }
       }
     } finally {
-      if (button) button.disabled = false;
+      state.bookingSubmitting = false;
+      if (button) button.disabled = keepBookingDisabled;
     }
   }
 
@@ -11779,9 +12110,14 @@
       return;
     }
 
-    if (event.target.id === "index-range") {
+    if (
+      event.target.id === "index-range" ||
+      event.target.id === "index-sp" ||
+      event.target.id === "index-dt" ||
+      event.target.id === "index-ty"
+    ) {
       state.sessionsLoaded = false;
-      void loadSessions();
+      void loadSessions({ page: 0, resetFallback: true });
       return;
     }
 
@@ -11857,8 +12193,21 @@
     searchForm.addEventListener("submit", (event) => {
       event.preventDefault();
       state.sessionsLoaded = false;
-      void loadSessions();
+      void loadSessions({ page: 0, resetFallback: true });
     });
+    const searchQueryInput = $("index-q");
+    if (searchQueryInput) {
+      searchQueryInput.addEventListener("input", () => {
+        if (sessionSearchState.debounceTimer) {
+          clearTimeout(sessionSearchState.debounceTimer);
+        }
+        sessionSearchState.debounceTimer = setTimeout(() => {
+          sessionSearchState.debounceTimer = null;
+          state.sessionsLoaded = false;
+          void loadSessions({ page: 0, resetFallback: true });
+        }, 250);
+      });
+    }
   }
 
   const directoryForm = document.querySelector('form[aria-label="Search doctors"]');
