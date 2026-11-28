@@ -9591,8 +9591,13 @@
   const managerNoticeState = {
     editingId: null,
     editingPublished: true,
-    page: 1,
-    pageSize: 6,
+    page: 0,
+    size: 20,
+    pageSize: 20,
+    totalPages: 1,
+    totalElements: 0,
+    published: null,
+    loading: false,
   };
 
   function setManagerNoticeFormMode(mode, notice) {
@@ -9808,7 +9813,30 @@
       card.append(form);
 
       const listCard = el("section", "bg-white border border-line rounded-lg p-4 sm:p-5 shadow-sm grid gap-3");
-      listCard.append(el("h3", "font-semibold text-ink", "All notices"));
+      const listHeader = el("div", "flex flex-wrap items-center justify-between gap-3");
+      listHeader.append(el("h3", "font-semibold text-ink", "All notices"));
+
+      const filterWrap = el("div", "flex items-center gap-2");
+      const filterLabel = el("label", "text-xs text-mute", "Filter:");
+      filterLabel.setAttribute("for", "manager-notices-filter");
+      const filter = document.createElement("select");
+      filter.id = "manager-notices-filter";
+      filter.dataset.managerNoticesFilter = "";
+      filter.className = "rounded border border-line bg-white px-2.5 py-1 text-xs text-slate2";
+      filter.append(
+        new Option("All notices", ""),
+        new Option("Published", "true"),
+        new Option("Draft / Withdrawn", "false")
+      );
+      filter.addEventListener("change", () => {
+        const val = filter.value;
+        const published = val === "" ? null : val === "true";
+        managerNoticeState.published = published;
+        void loadManagerNotices({ page: 0, published });
+      });
+      filterWrap.append(filterLabel, filter);
+      listHeader.append(filterWrap);
+
       const listStatus = document.createElement("output");
       listStatus.dataset.managerNoticesStatus = "";
       listStatus.setAttribute("aria-live", "polite");
@@ -9845,21 +9873,16 @@
       pagination.hidden = true;
       pagination.addEventListener("click", (event) => {
         const button = event.target.closest("button[data-manager-notices-page]");
-        if (!button || button.disabled) return;
-        const notices = Array.isArray(state.managerNotices) ? state.managerNotices : [];
-        const pages = Math.max(1, Math.ceil(notices.length / managerNoticeState.pageSize));
+        if (!button || button.disabled || managerNoticeState.loading) return;
         const direction = button.dataset.managerNoticesPage;
-        const nextPage =
-          direction === "next"
-            ? managerNoticeState.page + 1
-            : direction === "previous"
-              ? managerNoticeState.page - 1
-              : managerNoticeState.page;
-        managerNoticeState.page = Math.min(Math.max(1, nextPage), pages);
-        renderManagerNoticesPage();
+        if (direction === "next" && managerNoticeState.page < managerNoticeState.totalPages - 1) {
+          void loadManagerNotices({ page: managerNoticeState.page + 1 });
+        } else if (direction === "previous" && managerNoticeState.page > 0) {
+          void loadManagerNotices({ page: managerNoticeState.page - 1 });
+        }
       });
 
-      listCard.append(listStatus, list, pagination);
+      listCard.append(listHeader, listStatus, list, pagination);
 
       panel.append(card, listCard);
       main.append(panel);
@@ -9874,18 +9897,16 @@
     if (!container) return;
 
     const notices = Array.isArray(state.managerNotices) ? state.managerNotices : [];
-    const size = managerNoticeState.pageSize;
-    const pages = Math.max(1, Math.ceil(notices.length / size));
-    const page = Math.min(Math.max(1, managerNoticeState.page), pages);
-    managerNoticeState.page = page;
-
-    const start = notices.length ? (page - 1) * size : 0;
-    const end = Math.min(start + size, notices.length);
-    container.replaceChildren(...notices.slice(start, end).map(renderManagerNotice));
+    container.replaceChildren(...notices.map(renderManagerNotice));
 
     if (!pagination) return;
 
-    if (notices.length <= size) {
+    const totalElements = managerNoticeState.totalElements;
+    const totalPages = Math.max(1, managerNoticeState.totalPages);
+    const page = managerNoticeState.page;
+    const size = managerNoticeState.size || 20;
+
+    if (totalElements === 0) {
       pagination.hidden = true;
       pagination.replaceChildren();
       return;
@@ -9893,17 +9914,15 @@
 
     pagination.hidden = false;
 
+    const start = totalElements ? page * size + 1 : 0;
+    const end = Math.min((page + 1) * size, totalElements);
+
     const label = el(
       "p",
       "text-xs text-mute",
-      "Showing " +
-        (start + 1) +
-        "–" +
-        end +
-        " of " +
-        notices.length +
-        " notices"
+      "Showing " + start + "–" + end + " of " + totalElements + " notices"
     );
+    label.dataset.managerNoticesCount = "";
 
     const controls = el("div", "flex items-center gap-2");
 
@@ -9914,13 +9933,15 @@
     );
     previous.type = "button";
     previous.dataset.managerNoticesPage = "previous";
-    previous.disabled = page <= 1;
+    previous.dataset.managerNoticesPrev = "";
+    previous.disabled = page <= 0 || managerNoticeState.loading;
 
     const indicator = el(
       "span",
       "px-1 text-xs font-semibold text-slate2",
-      "Page " + page + " of " + pages
+      "Page " + (page + 1) + " of " + totalPages
     );
+    indicator.dataset.managerNoticesPageIndicator = "";
 
     const next = el(
       "button",
@@ -9929,7 +9950,8 @@
     );
     next.type = "button";
     next.dataset.managerNoticesPage = "next";
-    next.disabled = page >= pages;
+    next.dataset.managerNoticesNext = "";
+    next.disabled = page >= totalPages - 1 || managerNoticeState.loading;
 
     controls.append(previous, indicator, next);
     pagination.replaceChildren(label, controls);
@@ -9942,38 +9964,67 @@
     if (!container || !status) return false;
 
     const settings = options || {};
+    if (typeof settings.page === "number" && settings.page >= 0) {
+      managerNoticeState.page = settings.page;
+    }
+    if (typeof settings.published !== "undefined") {
+      managerNoticeState.published = settings.published;
+    }
+
     container.replaceChildren();
     const pagination = document.querySelector("[data-manager-notices-pagination]");
     if (pagination) pagination.hidden = true;
     setStatus(status, "Loading notices…");
+    managerNoticeState.loading = true;
 
     try {
-      const notices = await callWithWakeRetry(() => MC.managerNotices(), {
-        retry: true,
-      });
-      if (!Array.isArray(notices)) {
+      const page = managerNoticeState.page;
+      const size = managerNoticeState.size || 20;
+      const published = managerNoticeState.published;
+
+      const response = await callWithWakeRetry(
+        () => MC.managerNotices(published, page, size),
+        { retry: true }
+      );
+
+      let notices = [];
+      if (response && Array.isArray(response.content)) {
+        notices = response.content;
+        managerNoticeState.page = typeof response.page === "number" ? response.page : page;
+        managerNoticeState.size = typeof response.size === "number" ? response.size : size;
+        managerNoticeState.totalElements = typeof response.totalElements === "number" ? response.totalElements : notices.length;
+        managerNoticeState.totalPages = typeof response.totalPages === "number"
+          ? Math.max(1, response.totalPages)
+          : Math.max(1, Math.ceil(managerNoticeState.totalElements / managerNoticeState.size));
+      } else if (Array.isArray(response)) {
+        notices = response;
+        managerNoticeState.page = 0;
+        managerNoticeState.totalElements = notices.length;
+        managerNoticeState.totalPages = Math.max(1, Math.ceil(notices.length / size));
+      } else {
         throw new Error("The notice service returned an invalid response.");
       }
 
       state.managerNotices = notices;
-      if (typeof settings.page === "number") {
-        managerNoticeState.page = settings.page;
-      }
       renderManagerNoticesPage();
 
-      if (notices.length === 0) {
+      if (managerNoticeState.totalElements === 0) {
         setStatus(
           status,
           settings.successMessage
             ? settings.successMessage + " No notices have been created."
-            : "No notices have been created."
+            : (published != null ? "No notices found matching the selected filter." : "No notices have been created.")
         );
         return true;
       }
 
+      const start = managerNoticeState.page * managerNoticeState.size + 1;
+      const end = Math.min((managerNoticeState.page + 1) * managerNoticeState.size, managerNoticeState.totalElements);
       setStatus(
         status,
-        settings.successMessage || "Showing " + notices.length + " notices."
+        settings.successMessage
+          ? settings.successMessage + " Showing " + start + "–" + end + " of " + managerNoticeState.totalElements + " notices."
+          : "Showing " + start + "–" + end + " of " + managerNoticeState.totalElements + " notices."
       );
       return true;
     } catch (error) {
@@ -9985,7 +10036,20 @@
         "Could not load notices: " + (error.message || "Unknown error"),
         true
       );
+      const retryBtn = el(
+        "button",
+        "ml-2 inline-flex items-center gap-1 text-xs font-semibold underline text-brand hover:text-brand-d cursor-pointer",
+        "Retry"
+      );
+      retryBtn.type = "button";
+      retryBtn.dataset.managerNoticesRetry = "";
+      retryBtn.addEventListener("click", () => {
+        void loadManagerNotices(options);
+      });
+      status.append(retryBtn);
       return false;
+    } finally {
+      managerNoticeState.loading = false;
     }
   }
 
@@ -10030,7 +10094,7 @@
       setManagerNoticeFormMode("create");
       const refreshed = await loadManagerNotices({
         successMessage: editingId ? "Notice updated successfully." : "Notice published successfully.",
-        page: 1,
+        page: editingId ? managerNoticeState.page : 0,
       });
       if (!refreshed) {
         setStatus(
@@ -10103,14 +10167,9 @@
   async function handleManagerNoticeAction(action, noticeId, button) {
     const id = String(noticeId || "").trim();
     if (!id) {
-      setStatus(
-        document.querySelector("[data-manager-notices-status]"),
-        "Could not " + action + " notice: missing notice id.",
-        true
-      );
+      setStatus(document.querySelector("[data-manager-notices-status]"), "Could not " + action + " notice: missing notice id.", true);
       return;
     }
-
     if (action === "delete") {
       const confirmed = await confirmManagerNoticeDelete();
       if (!confirmed) {
@@ -10118,32 +10177,18 @@
         return;
       }
     }
-
     const listStatus = document.querySelector("[data-manager-notices-status]");
     const canLock = !button || !window.ManagerUI || typeof ManagerUI.lockAction !== "function" || ManagerUI.lockAction(button);
     if (!canLock) return;
-
-    setStatus(
-      listStatus,
-      action === "delete"
-        ? "Deleting notice…"
-        : action === "publish"
-          ? "Publishing notice…"
-          : "Withdrawing notice…"
-    );
-
+    setStatus(listStatus, action === "delete" ? "Deleting notice…" : action === "publish" ? "Publishing notice…" : "Withdrawing notice…");
     try {
       if (action === "delete") {
         try {
           await callWithWakeRetry(() => MC.deleteNotice(id), { retry: true });
         } catch (error) {
-          // A retry after a lost response reports 404 because the first request
-          // already deleted the notice. That outcome still matches the intent.
           if (!error || error.status !== 404) throw error;
         }
-        if (String(managerNoticeState.editingId || "") === id) {
-          setManagerNoticeFormMode("create");
-        }
+        if (String(managerNoticeState.editingId || "") === id) setManagerNoticeFormMode("create");
       } else if (action === "publish") {
         await callWithWakeRetry(() => MC.publishNotice(id), { retry: true });
       } else if (action === "withdraw") {
@@ -10151,15 +10196,12 @@
       } else {
         throw new Error("Unsupported notice action.");
       }
-
-      const successMessage =
-        action === "delete"
-          ? "Notice deleted successfully."
-          : action === "publish"
-            ? "Notice published successfully."
-            : "Notice withdrawn successfully.";
-
-      const refreshed = await loadManagerNotices({ successMessage });
+      const successMessage = action === "delete" ? "Notice deleted successfully." : action === "publish" ? "Notice published successfully." : "Notice withdrawn successfully.";
+      let targetPage = managerNoticeState.page;
+      if (action === "delete" && state.managerNotices.length <= 1 && managerNoticeState.page > 0) {
+        targetPage = managerNoticeState.page - 1;
+      }
+      const refreshed = await loadManagerNotices({ page: targetPage, successMessage });
       if (!refreshed) {
         setStatus(listStatus, successMessage + " The notice list could not be refreshed.", true);
       }
@@ -10167,11 +10209,7 @@
       void loadPublicNotices({ force: true }).catch(() => {});
     } catch (error) {
       console.warn("Could not perform manager notice action:", error);
-      setStatus(
-        listStatus,
-        "Could not " + action + " notice: " + (error.message || "Unknown error"),
-        true
-      );
+      setStatus(listStatus, "Could not " + action + " notice: " + (error.message || "Unknown error"), true);
     } finally {
       if (button && window.ManagerUI && typeof ManagerUI.unlockAction === "function") {
         ManagerUI.unlockAction(button);

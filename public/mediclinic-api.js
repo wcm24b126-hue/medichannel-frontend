@@ -303,8 +303,13 @@
       return request("notices");
     },
 
-    managerNotices() {
-      return request("notices/manage");
+    managerNotices(published, page, size) {
+      const params = {};
+      if (published != null && published !== "") params.published = published;
+      if (page != null) params.page = page;
+      if (size != null) params.size = size;
+      const q = query(params);
+      return q ? request("notices/manage" + q) : request("notices/manage");
     },
 
     createNotice(payload) {
