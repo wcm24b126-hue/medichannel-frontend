@@ -11,6 +11,7 @@ export default function Navbar() {
         <nav className="flex flex-wrap items-center gap-5 text-sm font-medium text-slate-700">
           <Link href="/">Home</Link>
           <Link href="/doctors">Find Doctors</Link>
+          <Link href="/mediclinic-system.html#notices">Notices</Link>
           <Link href="/appointments">Appointments</Link>
           <Link href="/login">Login</Link>
           <Link

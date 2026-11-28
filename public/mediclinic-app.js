@@ -1120,6 +1120,7 @@
 
     const panel = el("div", "mc-search-select");
     panel.hidden = true;
+    panel.setAttribute("aria-hidden", "true");
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Search dropdown options");
 
@@ -1129,9 +1130,11 @@
     input.autocomplete = "off";
     input.placeholder = "Search options…";
     input.setAttribute("aria-label", "Search options");
+    input.tabIndex = -1;
     const close = el("button", "", "×");
     close.type = "button";
     close.setAttribute("aria-label", "Close options");
+    close.tabIndex = -1;
     head.append(input, close);
 
     const list = el("div", "mc-search-select-options");
@@ -1174,10 +1177,16 @@
 
   function closeSearchSelect() {
     if (!searchableSelect) return;
+    searchableSelect.setAttribute("aria-expanded", "false");
     searchableSelect.removeAttribute("aria-expanded");
     searchableSelect = null;
     searchableIndex = -1;
     if (searchSelectPanel) searchSelectPanel.panel.hidden = true;
+    if (searchSelectPanel) {
+      searchSelectPanel.panel.setAttribute("aria-hidden", "true");
+      searchSelectPanel.input.tabIndex = -1;
+      searchSelectPanel.close.tabIndex = -1;
+    }
   }
 
   function setSearchableActive(index) {
@@ -1260,8 +1269,11 @@
     searchableSelect = select;
     select.setAttribute("aria-expanded", "true");
     ui.input.value = "";
+    ui.input.tabIndex = 0;
+    ui.close.tabIndex = 0;
     positionSearchSelectPanel(select, ui.panel);
     ui.panel.hidden = false;
+    ui.panel.removeAttribute("aria-hidden");
     renderSearchableOptions();
     // Focusing the search field can scroll it into view; do not treat that
     // programmatic scroll as a user dismissal.
@@ -1557,6 +1569,11 @@
       id = "consult";
     }
 
+    if (id === "notices" || id === "public-notices-panel") {
+      id = "welcome";
+      panel = "public-notices-panel";
+    }
+
     const candidate = document.getElementById(id);
 
     if (
@@ -1608,12 +1625,17 @@
   }
 
   function setPrimaryNavCurrent(viewId) {
+    const hash = (decodeURIComponent(location.hash.slice(1)) || "").toLowerCase();
+    const isNoticesActive = hash === "notices" || hash === "public-notices-panel";
     document
       .querySelectorAll(
         'nav[aria-label="Pages"] a[href^="#"]:not([data-panel-link])'
       )
       .forEach((link) => {
-        const isCurrent = link.getAttribute("href") === "#" + viewId;
+        const href = link.getAttribute("href");
+        const isCurrent = isNoticesActive
+          ? href === "#notices" || href === "#public-notices-panel"
+          : href === "#" + viewId;
         if (isCurrent) {
           link.setAttribute("aria-current", "page");
           link.classList.remove("text-slate2", "hover:bg-snow");
@@ -1997,7 +2019,12 @@
       setPrimaryNavCurrent(targetId);
       initPanels(view, panel);
 
-      document.title = view.dataset.title + " · MediChannel";
+      const hash = (decodeURIComponent(location.hash.slice(1)) || "").toLowerCase();
+      const isNoticesTarget = panel === "public-notices-panel" || hash === "notices" || hash === "public-notices-panel";
+
+      document.title = (isNoticesTarget
+        ? "Notices & Announcements"
+        : view.dataset.title) + " · MediChannel";
 
       const robotsMeta = document.querySelector('meta[name="robots"]');
       if (robotsMeta) {
@@ -2010,8 +2037,12 @@
       }
 
       if (routeAnnounced) {
-        focusViewHeading(view);
-        announceRoute(view.dataset.title || "MediChannel");
+        if (isNoticesTarget) {
+          announceRoute("Notices & announcements");
+        } else {
+          focusViewHeading(view);
+          announceRoute(view.dataset.title || "MediChannel");
+        }
       } else {
         routeAnnounced = true;
       }
@@ -2032,12 +2063,45 @@
         flash = "";
       }
 
-      window.scrollTo(0, 0);
-      if (targetId === "welcome") {
-        playWelcomeEntrance();
+      if (targetId === "welcome" && isNoticesTarget) {
+        requestAnimationFrame(() => {
+          const noticesPanel = $("public-notices-panel");
+          if (noticesPanel) {
+            noticesPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+            const heading = noticesPanel.querySelector("h2");
+            if (heading) {
+              heading.setAttribute("tabindex", "-1");
+              heading.focus({ preventScroll: true });
+            }
+          }
+        });
       } else {
-        animateEntry(view, 0, 320);
+        window.scrollTo(0, 0);
+        if (targetId === "welcome") {
+          playWelcomeEntrance();
+        } else {
+          animateEntry(view, 0, 320);
+        }
       }
+    } else if (panel === "public-notices-panel" || (targetId === "welcome" && (location.hash === "#notices" || location.hash === "#public-notices-panel"))) {
+      setPrimaryNavCurrent(targetId);
+      document.title = "Notices & Announcements · MediChannel";
+      announceRoute("Notices & announcements");
+      requestAnimationFrame(() => {
+        const noticesPanel = $("public-notices-panel");
+        if (noticesPanel) {
+          noticesPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+          const heading = noticesPanel.querySelector("h2");
+          if (heading) {
+            heading.setAttribute("tabindex", "-1");
+            heading.focus({ preventScroll: true });
+          }
+        }
+      });
+    } else if (targetId === "welcome" && !panel && location.hash !== "#notices" && location.hash !== "#public-notices-panel") {
+      setPrimaryNavCurrent(targetId);
+      document.title = view.dataset.title + " · MediChannel";
+      window.scrollTo(0, 0);
     } else if (panel) {
       setPanel(view, panel);
     }
@@ -2489,6 +2553,7 @@
         });
 
         if (current) select.value = current;
+        select.setAttribute("aria-expanded", "false");
       });
       state.specialisationsLoaded = true;
     } catch {
@@ -11796,6 +11861,21 @@
       if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) {
         event.preventDefault();
         openSearchSelect(select);
+        return;
+      }
+      if (
+        event.key &&
+        event.key.length === 1 &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        openSearchSelect(select);
+        if (searchSelectPanel && searchSelectPanel.input) {
+          searchSelectPanel.input.value = event.key;
+          renderSearchableOptions();
+        }
       }
     },
     true
