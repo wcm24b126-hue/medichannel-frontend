@@ -1701,6 +1701,9 @@
     if (link.hash === "#doctor-n") {
       loadOnce(loadDoctorNotesPicker);
     }
+    if (link.hash === "#doctor-h") {
+      void loadDoctorHistory();
+    }
 
     if (link.hash === "#admin-u" || link.hash === "#manager-u" || link.hash === "#admin" || link.hash === "#manager") {
       loadOnce(loadStaffAccounts);
@@ -1787,6 +1790,9 @@
 
     if (active.id === "doctor-n") {
       loadOnce(loadDoctorNotesPicker);
+    }
+    if (active.id === "doctor-h") {
+      void loadDoctorHistory();
     }
 
     if (active.id === "admin-u" || active.id === "manager-u") {
@@ -2383,6 +2389,20 @@
     state.doctor.identityLoading = false;
     state.doctor.allAppointments = [];
     state.doctor.sessionAppointments = [];
+    state.doctor.historyPage = {
+      page: 0,
+      size: 20,
+      totalPages: 0,
+      totalElements: 0,
+      items: [],
+      statusFilter: "",
+    };
+    state.doctor.historyReload = {
+      inFlight: false,
+      pending: false,
+      page: 0,
+    };
+    state.doctor.historyTimer = null;
 
     S = {
       id: user.id || user.userId || null,
@@ -2869,8 +2889,23 @@
 
     if (S.role === "DOCTOR") {
       syncReviewNotification(notification);
+      const isHistoryEvent = [
+        "CONSULTATION_COMPLETED",
+        "APPOINTMENT_NO_SHOW",
+        "APPOINTMENT_CANCELLED",
+      ].includes(notification.type);
+
       if (state.doctor.sessionId) {
         void loadDoctorQueue(state.doctor.sessionId, { silent: true });
+      }
+      if (isHistoryEvent) {
+        if (state.doctor.historyTimer) {
+          clearTimeout(state.doctor.historyTimer);
+        }
+        state.doctor.historyTimer = setTimeout(() => {
+          state.doctor.historyTimer = null;
+          void loadDoctorHistory();
+        }, 300);
       }
       if (typeof loadDoctorAppointments === "function" && activeView === "doctor") {
         void loadDoctorAppointments({ silent: true });
@@ -5810,6 +5845,7 @@
 
       await loadDoctorQueue(chosenSessionId);
       loadOnce(loadDoctorNotesPicker);
+      void loadDoctorHistory();
     } catch (error) {
       if (error.status === 401) {
         handleSessionExpired();
@@ -6192,6 +6228,198 @@
     });
   }
 
+  async function loadDoctorHistory(options = {}) {
+    if (!S || S.role !== "DOCTOR") return;
+
+    const reloadState = state.doctor.historyReload;
+    const requestedPage =
+      options && Number.isInteger(options.page) && options.page >= 0
+        ? options.page
+        : (state.doctor.historyPage && state.doctor.historyPage.page) || 0;
+
+    if (reloadState.inFlight) {
+      reloadState.pending = true;
+      if (Number.isInteger(options.page) && options.page >= 0) {
+        reloadState.page = options.page;
+      }
+      return;
+    }
+
+    reloadState.inFlight = true;
+    const status = document.querySelector("[data-doctor-history-status]");
+    const tbody = document.querySelector("[data-doctor-history-rows]");
+    const empty = document.querySelector("[data-doctor-history-empty]");
+    const filterSelect = $("doctor-history-status-filter");
+    const requestedStatus = (filterSelect && filterSelect.value) || "";
+    const requestedSize = (state.doctor.historyPage && state.doctor.historyPage.size) || 20;
+
+    if (status) {
+      status.hidden = false;
+      status.classList.remove("hidden", "text-bad");
+      status.textContent = "Loading past appointments…";
+    }
+
+    try {
+      const filters = { page: requestedPage, size: requestedSize };
+      if (requestedStatus) filters.status = requestedStatus;
+
+      const payload = await MC.doctorAppointmentHistory(filters);
+      const norm = normalizeAppointmentsResponse(payload);
+      const items = norm ? norm.content : [];
+      const totalElements = norm ? norm.totalElements : items.length;
+      const totalPages = norm ? norm.totalPages : Math.ceil(items.length / requestedSize);
+      const page = norm ? norm.page : requestedPage;
+
+      state.doctor.historyPage = {
+        page,
+        size: requestedSize,
+        totalPages,
+        totalElements,
+        items,
+        statusFilter: requestedStatus,
+      };
+
+      if (status) {
+        status.hidden = true;
+        status.textContent = "";
+      }
+
+      if (items.length === 0) {
+        if (tbody) tbody.replaceChildren();
+        if (empty) empty.hidden = false;
+        renderDoctorHistoryPagination(page, totalPages, totalElements);
+        return;
+      }
+
+      if (empty) empty.hidden = true;
+      renderDoctorHistoryRows(items);
+      renderDoctorHistoryPagination(page, totalPages, totalElements);
+    } catch (error) {
+      if (error && error.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (status) {
+        status.hidden = false;
+        status.classList.add("text-bad");
+        status.replaceChildren();
+        const msg = (error && error.message) || "Could not load past appointments.";
+        const retryBtn = el("button", "font-semibold text-brand underline ml-2 cursor-pointer", "Retry");
+        retryBtn.type = "button";
+        retryBtn.dataset.doctorHistoryRetry = "true";
+        status.append(document.createTextNode(msg + " "), retryBtn);
+      }
+      if (tbody) tbody.replaceChildren();
+      if (empty) empty.hidden = false;
+    } finally {
+      reloadState.inFlight = false;
+      if (reloadState.pending) {
+        reloadState.pending = false;
+        const nextPage = reloadState.page;
+        reloadState.page = 0;
+        void loadDoctorHistory({ page: nextPage });
+      }
+    }
+  }
+
+  function renderDoctorHistoryPagination(page, totalPages, totalElements) {
+    const container = document.querySelector("[data-doctor-history-pagination]");
+    const info = document.querySelector("[data-doctor-history-page-info]");
+    const prev = document.querySelector("[data-doctor-history-prev]");
+    const next = document.querySelector("[data-doctor-history-next]");
+
+    if (!container) return;
+
+    if (totalElements <= 0 && totalPages <= 0) {
+      container.hidden = true;
+      return;
+    }
+
+    container.hidden = false;
+    const effectiveTotalPages = Math.max(1, totalPages);
+    if (info) {
+      info.textContent = "Page " + (page + 1) + " of " + effectiveTotalPages + " (" + totalElements + " total)";
+    }
+    if (prev) {
+      prev.disabled = page <= 0;
+    }
+    if (next) {
+      next.disabled = page >= effectiveTotalPages - 1;
+    }
+  }
+
+  function renderDoctorHistoryRows(items) {
+    const tbody = document.querySelector("[data-doctor-history-rows]");
+    if (!tbody) return;
+
+    tbody.replaceChildren();
+
+    items.forEach((appointment) => {
+      const row = document.createElement("tr");
+      row.className = "[&>td]:text-mute";
+
+      const sessionDateCell = document.createElement("td");
+      sessionDateCell.dataset.label = "Session";
+      sessionDateCell.textContent =
+        formatDate(appointment.sessionDate) +
+        " · " +
+        formatTime(appointment.startTime);
+      row.append(sessionDateCell);
+
+      const number = document.createElement("td");
+      number.dataset.label = "No.";
+      number.append(el("b", "", "#" + appointment.appointmentNumber));
+      row.append(number);
+
+      const patient = document.createElement("td");
+      patient.dataset.label = "Patient";
+      patient.textContent = appointment.patientName || "Patient";
+      row.append(patient);
+
+      const type = document.createElement("td");
+      type.dataset.label = "Type";
+      type.textContent =
+        appointment.consultationType === "ONLINE" ? "Online" : "Physical";
+      row.append(type);
+
+      const status = document.createElement("td");
+      status.dataset.label = "Status";
+      let entry = APPT_STATUS[appointment.status] || [titleCase(appointment.status), "slate"];
+      status.append(badge(entry[0], entry[1]));
+      row.append(status);
+
+      const payment = document.createElement("td");
+      payment.dataset.label = "Payment";
+      if (appointment.paymentStatus === "PAID") {
+        payment.textContent =
+          "Paid" +
+          (appointment.paymentMethod
+            ? " · " + titleCase(appointment.paymentMethod)
+            : "");
+      } else {
+        payment.append(badge("Not paid", "orange"));
+      }
+      row.append(payment);
+
+      const actions = document.createElement("td");
+      actions.dataset.label = "Actions";
+      actions.className = "flex flex-wrap items-center justify-end gap-2";
+
+      if (appointment.status === "COMPLETED") {
+        actions.append(
+          doctorAction("Notes", "bg-white border-line text-slate2 hover:bg-snow", "notes", appointment.appointmentId),
+          doctorAction("Chat", "bg-white border-line text-slate2 hover:bg-snow", "chat", appointment.appointmentId)
+        );
+      }
+      actions.append(
+        doctorAction("Clear from history", "bg-white border-line text-slate2 hover:bg-snow", "clear", appointment.appointmentId)
+      );
+
+      row.append(actions);
+      tbody.append(row);
+    });
+  }
+
   function doctorAction(label, tone, name, id) {
     // data-doctor-action carries the action name; data-doctor-id keeps the
     // appointment id so the click handler can pass both to runDoctorAction().
@@ -6203,6 +6431,7 @@
   function findDoctorAppointment(appointmentId) {
     const pools = [
       state.doctor.queue && state.doctor.queue.appointments,
+      state.doctor.historyPage && state.doctor.historyPage.items,
       state.doctor.allAppointments,
       state.doctor.sessionAppointments,
       state.consult.list,
@@ -6361,9 +6590,11 @@
         }
 
         selectNotes(result.completed);
+        void loadDoctorHistory();
       } else if (name === "noshow") {
         await MC.markNoShow(appointmentId);
         setStatus(statusNode, "Appointment marked as a no-show.");
+        void loadDoctorHistory();
       } else if (name === "clear") {
         const confirmed = await confirmClearHistory("doctor");
         if (!confirmed) {
@@ -6376,6 +6607,7 @@
           "Patient cleared from this session history. Hospital records are unchanged."
         );
         await loadDoctorQueue(state.doctor.sessionId, { silent: true });
+        void loadDoctorHistory();
         return;
       } else if (name === "notes" || name === "chat") {
         if (button) button.disabled = false;
@@ -7023,11 +7255,15 @@
       if (S.role === "CUSTOMER") {
         fresh = await MC.myAppointment(appointmentId);
       } else if (S.role === "DOCTOR") {
-        const all = await MC.doctorAppointments({});
-        if (Array.isArray(all)) {
-          fresh = all.find(
-            (item) => String(item.appointmentId) === String(appointmentId)
-          ) || null;
+        try {
+          fresh = await MC.doctorAppointment(appointmentId);
+        } catch {
+          const all = await MC.doctorAppointments({});
+          if (Array.isArray(all)) {
+            fresh = all.find(
+              (item) => String(item.appointmentId) === String(appointmentId)
+            ) || null;
+          }
         }
       }
       if (fresh) {
@@ -7311,11 +7547,15 @@
       if (S.role === "CUSTOMER") {
         fresh = await MC.myAppointment(appointmentId);
       } else if (S.role === "DOCTOR") {
-        const all = await MC.doctorAppointments({});
-        if (Array.isArray(all)) {
-          fresh = all.find(
-            (item) => String(item.appointmentId) === String(appointmentId)
-          ) || null;
+        try {
+          fresh = await MC.doctorAppointment(appointmentId);
+        } catch {
+          const all = await MC.doctorAppointments({});
+          if (Array.isArray(all)) {
+            fresh = all.find(
+              (item) => String(item.appointmentId) === String(appointmentId)
+            ) || null;
+          }
         }
       }
     } catch {
@@ -10873,6 +11113,20 @@
       profile: null,
       identityLoading: false,
       queueTimer: null,
+      historyPage: {
+        page: 0,
+        size: 20,
+        totalPages: 0,
+        totalElements: 0,
+        items: [],
+        statusFilter: "",
+      },
+      historyReload: {
+        inFlight: false,
+        pending: false,
+        page: 0,
+      },
+      historyTimer: null,
     };
     state.consult.appointmentId = null;
     state.consult.requestedId = null;
@@ -11312,6 +11566,28 @@
       return;
     }
 
+    if (event.target.closest("[data-doctor-history-refresh]") || event.target.closest("[data-doctor-history-retry]")) {
+      const currentPage = (state.doctor.historyPage && state.doctor.historyPage.page) || 0;
+      void loadDoctorHistory({ page: currentPage });
+      return;
+    }
+
+    if (event.target.closest("[data-doctor-history-prev]")) {
+      const currentPage = (state.doctor.historyPage && state.doctor.historyPage.page) || 0;
+      if (currentPage > 0) {
+        void loadDoctorHistory({ page: currentPage - 1 });
+      }
+      return;
+    }
+
+    if (event.target.closest("[data-doctor-history-next]")) {
+      const meta = state.doctor.historyPage;
+      if (meta && meta.page + 1 < meta.totalPages) {
+        void loadDoctorHistory({ page: meta.page + 1 });
+      }
+      return;
+    }
+
     if (event.target.closest("[data-appointments-refresh]")) {
       void loadAppointments();
       return;
@@ -11393,6 +11669,11 @@
         : $("doctor-session-select");
       if (other) other.value = val;
       void loadDoctorQueue(val);
+      return;
+    }
+
+    if (event.target.id === "doctor-history-status-filter") {
+      void loadDoctorHistory({ page: 0 });
       return;
     }
 

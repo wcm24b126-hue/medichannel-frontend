@@ -606,6 +606,20 @@
       return request("doctor/appointments" + query(filters));
     },
 
+    doctorAppointment(appointmentId) {
+      return request(
+        "doctor/appointments/" + encodeURIComponent(appointmentId)
+      );
+    },
+
+    doctorActiveAppointments(filters) {
+      return request("doctor/appointments/active" + query(filters));
+    },
+
+    doctorAppointmentHistory(filters) {
+      return request("doctor/appointments/history" + query(filters));
+    },
+
     acceptAppointment(appointmentId) {
       return request(
         "doctor/appointments/" + encodeURIComponent(appointmentId) + "/accept",
