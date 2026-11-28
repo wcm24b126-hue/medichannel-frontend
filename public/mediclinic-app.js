@@ -9463,13 +9463,8 @@
     const firstLoad = dashboardFetchedAt === 0;
     if (firstLoad) {
       setManagerDashboardCards({
-        sessionsThisWeek: "…",
-        doctorsToday: "…",
-        completedToday: "…",
-        cancelledToday: "…",
-        appointmentsToday: "…",
-        typeSplit: "…",
-        revenue: "…",
+        sessionsThisWeek: "…", doctorsToday: "…", completedToday: "…",
+        cancelledToday: "…", appointmentsToday: "…", typeSplit: "…", revenue: "…",
       });
     }
     setStatus(status, firstLoad ? "Loading dashboard figures…" : "");
@@ -9480,7 +9475,6 @@
         const report = await MC.reportOverview({ from: today, to: today });
         const metrics = ManagerUI.dashboardMetrics(report);
 
-        // Formatting (zero vs unavailable, LKR) lives in the tested helper.
         setManagerDashboardCards(ManagerUI.dashboardCardValues(metrics));
 
         dashboardFetchedAt = Date.now();
@@ -9490,13 +9484,8 @@
         console.warn("Could not load manager dashboard report:", error);
         dashboardFetchedAt = 0;
         setManagerDashboardCards({
-          sessionsThisWeek: "—",
-          doctorsToday: "—",
-          completedToday: "—",
-          cancelledToday: "—",
-          appointmentsToday: "—",
-          typeSplit: "—",
-          revenue: "—",
+          sessionsThisWeek: "—", doctorsToday: "—", completedToday: "—",
+          cancelledToday: "—", appointmentsToday: "—", typeSplit: "—", revenue: "—",
         });
         if (status) {
           status.hidden = false;
@@ -9504,19 +9493,13 @@
           status.classList.add("text-bad");
           status.replaceChildren();
           const msg = document.createElement("span");
-          msg.textContent =
-            "Could not load dashboard figures: " +
-            (error.message || "Unknown error") +
-            " The dashboard values are unavailable. ";
+          msg.textContent = "Could not load dashboard figures: " + (error.message || "Unknown error") + " The dashboard values are unavailable. ";
           const retryBtn = document.createElement("button");
           retryBtn.type = "button";
-          retryBtn.className =
-            "inline-flex items-center ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-white border border-bad text-bad hover:bg-rose-50 cursor-pointer";
+          retryBtn.className = "ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-white border border-bad text-bad cursor-pointer";
           retryBtn.setAttribute("data-retry-manager-dashboard", "true");
           retryBtn.textContent = "Retry";
-          retryBtn.addEventListener("click", () => {
-            void loadManagerDashboard({ force: true });
-          });
+          retryBtn.addEventListener("click", () => { void loadManagerDashboard({ force: true }); });
           status.append(msg, retryBtn);
         }
         return false;
@@ -10199,22 +10182,124 @@
     }
   }
 
+  const managerReviewsState = {
+    page: 0,
+    size: 20,
+    totalPages: 1,
+    totalElements: 0,
+    status: "",
+    loading: false,
+    initialized: false,
+  };
+
+  function updateManagerReviewsPagination() {
+    const pagination = document.querySelector("[data-manager-reviews-pagination]");
+    const prevBtn = document.querySelector("[data-manager-reviews-prev]");
+    const nextBtn = document.querySelector("[data-manager-reviews-next]");
+    const pageText = document.querySelector("[data-manager-reviews-page]");
+
+    if (!pagination) return;
+
+    if (managerReviewsState.totalElements === 0) {
+      pagination.hidden = true;
+      return;
+    }
+
+    pagination.hidden = false;
+    const current = managerReviewsState.page + 1;
+    const total = Math.max(1, managerReviewsState.totalPages);
+    if (pageText) {
+      pageText.textContent = "Page " + current + " of " + total;
+    }
+    if (prevBtn) {
+      prevBtn.disabled = managerReviewsState.page <= 0 || managerReviewsState.loading;
+    }
+    if (nextBtn) {
+      nextBtn.disabled =
+        managerReviewsState.page >= managerReviewsState.totalPages - 1 ||
+        managerReviewsState.loading;
+    }
+  }
+
+  function initManagerReviewsControls() {
+    if (managerReviewsState.initialized) return;
+    const prevBtn = document.querySelector("[data-manager-reviews-prev]");
+    const nextBtn = document.querySelector("[data-manager-reviews-next]");
+    const filter = document.querySelector("[data-manager-reviews-status-filter]");
+
+    if (prevBtn) {
+      prevBtn.addEventListener("click", () => {
+        if (managerReviewsState.page > 0 && !managerReviewsState.loading) {
+          loadManagerReviews({ page: managerReviewsState.page - 1 });
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener("click", () => {
+        if (
+          managerReviewsState.page < managerReviewsState.totalPages - 1 &&
+          !managerReviewsState.loading
+        ) {
+          loadManagerReviews({ page: managerReviewsState.page + 1 });
+        }
+      });
+    }
+
+    if (filter) {
+      filter.addEventListener("change", (e) => {
+        loadManagerReviews({ page: 0, status: e.target.value });
+      });
+    }
+
+    managerReviewsState.initialized = true;
+  }
+
   async function loadManagerReviews(options) {
+    initManagerReviewsControls();
     const container = document.querySelector("[data-manager-reviews]");
     const status = document.querySelector("[data-manager-reviews-status]");
     if (!container || !status) return false;
 
     const settings = options || {};
+    if (typeof settings.page === "number" && settings.page >= 0) {
+      managerReviewsState.page = settings.page;
+    }
+    if (typeof settings.status === "string") {
+      managerReviewsState.status = settings.status;
+    }
+
+    managerReviewsState.loading = true;
+    updateManagerReviewsPagination();
     container.replaceChildren();
     setStatus(status, "Loading feedback…");
 
     try {
-      const reviews = await MC.managerReviews();
-      if (!Array.isArray(reviews)) {
+      const response = await MC.managerReviews(
+        managerReviewsState.status,
+        managerReviewsState.page,
+        managerReviewsState.size
+      );
+
+      let reviews = [];
+      if (response && Array.isArray(response.content)) {
+        reviews = response.content;
+        managerReviewsState.page = Number(response.page) || 0;
+        managerReviewsState.size = Number(response.size) || 20;
+        managerReviewsState.totalElements = Number(response.totalElements) || 0;
+        managerReviewsState.totalPages = Number(response.totalPages) || 0;
+      } else if (Array.isArray(response)) {
+        reviews = response;
+        managerReviewsState.totalElements = response.length;
+        managerReviewsState.totalPages = response.length > 0 ? 1 : 0;
+      } else {
         throw new Error("The review service returned an invalid response.");
       }
 
+      managerReviewsState.loading = false;
+
       if (reviews.length === 0) {
+        updateManagerReviewsPagination();
         setStatus(
           status,
           settings.successMessage
@@ -10225,12 +10310,16 @@
       }
 
       container.replaceChildren(...reviews.map(renderManagerReview));
+      updateManagerReviewsPagination();
       setStatus(
         status,
-        settings.successMessage || "Showing " + reviews.length + " reviews."
+        settings.successMessage ||
+          "Showing " + reviews.length + " of " + managerReviewsState.totalElements + " reviews."
       );
       return true;
     } catch (error) {
+      managerReviewsState.loading = false;
+      updateManagerReviewsPagination();
       console.warn("Could not load manager feedback:", error);
       setStatus(
         status,
@@ -11153,6 +11242,11 @@
     auditLogState.refreshPending = false;
     if (state.auditLogTimer) clearInterval(state.auditLogTimer);
     state.auditLogTimer = null;
+    managerReviewsState.page = 0;
+    managerReviewsState.totalPages = 1;
+    managerReviewsState.totalElements = 0;
+    managerReviewsState.status = "";
+    managerReviewsState.loading = false;
     unsubscribe("admin-audit-logs");
     renderNotificationBadge(0);
     render();

@@ -342,8 +342,14 @@
     },
 
     // Feedback moderation ---------------------------------------------
-    managerReviews(status) {
-      return request("reviews/manage" + query({ status }));
+    managerReviews(status, page, size, doctorId, rating) {
+      const params = {};
+      if (status) params.status = status;
+      if (page != null) params.page = page;
+      if (size != null) params.size = size;
+      if (doctorId) params.doctorId = doctorId;
+      if (rating != null) params.rating = rating;
+      return request("reviews/manage" + query(params));
     },
 
     approveReview(reviewId) {
@@ -549,7 +555,14 @@
     },
 
     doctorReviews(doctorId) {
-      return request("doctors/" + encodeURIComponent(doctorId) + "/reviews");
+      const page = arguments[1];
+      const size = arguments[2];
+      const params = {};
+      if (page != null) params.page = page;
+      if (size != null) params.size = size;
+      return request(
+        "doctors/" + encodeURIComponent(doctorId) + "/reviews" + query(params)
+      );
     },
 
     // Patient profile -------------------------------------------------
